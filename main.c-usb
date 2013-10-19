@@ -1,0 +1,242 @@
+#include <avr/wdt.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <avr/sleep.h>
+#include <avr/eeprom.h>
+#include <avr/pgmspace.h>
+#include "codes.h"
+#include "ringbuffer.h"
+
+#define clear_bit(v, bit) v &= ~(1 << bit)
+#define set_bit(v, bit)   v |=	(1 << bit)
+
+#define CLOCK_DEVIDE 64.0
+#define TIMER_INTERVAL (1.0 / (F_CPU / CLOCK_DEVIDE / 256) * 1000)
+#define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
+#define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
+
+#include "usbdrv/usbdrv.h"
+#include "usbdrv/oddebug.h"
+
+uint32_t NLZ (uint32_t x) {
+	if (x == 0) { return 32; }
+	x = x | (x >> 1);
+	x = x | (x >> 2);
+	x = x | (x >> 4);
+	x = x | (x >> 8);
+	x = x | (x >>16);
+	return 31 - ("\0\1\2\xf\x1d\3\x17\x10\x1e\x1b\4\6\xc\x18\x8\x11\x1f\xe\x1c\x16\x1a\5\xb\7\xd\x15\x19\xa\x14\x9\x13\x12")[0x5763e69U * (x - (x >> 1)) >> 27];
+}
+
+/**
+ * Global variables
+ */
+
+unsigned int timer;
+ringbuffer send_buffer;
+
+ISR(TIMER0_OVF_vect) {
+	timer++;
+}
+
+void delay_ms(unsigned int t) {
+	unsigned int end = timer + DURATION(t);
+	cli();
+	// ここの間に timer がすすんでオーバーフローすると死ぬ
+	while (end < timer) { // end is overflowed?
+		sei();
+		wdt_reset();
+		usbPoll();
+		cli();
+	}
+	sei();
+	while (timer <= end) {
+		wdt_reset();
+		usbPoll();
+	}
+}
+
+/****
+ * USB Control
+ */
+
+PROGMEM const char usbHidReportDescriptor[22] = {	 /* USB report descriptor */
+	0x06, 0x00, 0xff,			   // USAGE_PAGE (Generic Desktop)
+	0x09, 0x01,					   // USAGE (Vendor Usage 1)
+	0xa1, 0x01,					   // COLLECTION (Application)
+	0x15, 0x00,					   //	LOGICAL_MINIMUM (0)
+	0x26, 0xff, 0x00,			   //	LOGICAL_MAXIMUM (255)
+	0x75, 0x08,					   //	REPORT_SIZE (8)
+	0x95, 0x80,					   //	REPORT_COUNT (128)
+	0x09, 0x00,					   //	USAGE (Undefined)
+	0xb2, 0x02, 0x01,			   //	FEATURE (Data,Var,Abs,Buf)
+	0xc0						   // END_COLLECTION
+};
+
+unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
+	set_bit(PINB, 0);
+	return len;
+}
+
+unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
+	unsigned char i;
+	for (i = 0; i < len; i++) {
+		ringbuffer_put(&send_buffer, data[i]);
+	}
+	return 1;
+}
+
+usbMsgLen_t usbFunctionSetup(unsigned char data[8]) {
+	usbRequest_t* rq = (void*)data;
+
+	if ((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS) {
+		if (rq->bRequest == USBRQ_HID_GET_REPORT) {
+			return USB_NO_MSG;
+		} else
+		if (rq->bRequest == USBRQ_HID_SET_REPORT) {
+			return USB_NO_MSG;
+		}
+	} else {
+		/* ignore vendor type requests, we don't use any */
+	}
+	return 0;
+}
+
+void setup_io () {
+	unsigned char i;
+
+	ringbuffer_init(&send_buffer);
+
+	timer = 0;
+
+	DDRB  = 0b11111111;
+	PORTB = 0b00000000;
+
+	/**
+	 * timer interrupt
+	 * 16MHz  / 64 prescale / 8bit = 0.1msec
+	 */
+	TCCR0A = 0b00000000;
+	TCCR0B = 0b00000010;
+	TIMSK0 = 0b00000001;
+
+	wdt_enable(WDTO_1S);
+
+	usbInit();
+	usbDeviceDisconnect();
+
+	i = 0;
+	while(--i){             /* fake USB disconnect for > 250 ms */
+		wdt_reset();
+		_delay_ms(1);
+	}
+	usbDeviceConnect();
+	sei();
+}
+
+//int main (void) {
+//	unsigned int i;
+//	unsigned char character;
+//	unsigned long current_sign;
+//	unsigned char current_bit;
+//
+//	setup_io();
+//
+//	for (;;) {
+//		if (send_buffer.size > 0) {
+//			character = ringbuffer_get(&send_buffer);
+//			current_sign = (uint32_t)pgm_read_word(MORSE_CODES[character]) << 16 | (uint32_t)pgm_read_word(MORSE_CODES[character] + 2);
+//			current_bit  = 32 - NLZ(current_sign);
+//			for (i = current_bit; i > 0; i--) {
+//				if (bit_is_set(current_sign, current_bit)) {
+//					set_bit(PINB, PB0);
+//				} else {
+//					clear_bit(PINB, PB0);
+//				}
+//				delay_ms(1000);
+//			}
+//			delay_ms(1000 * 3);
+//		}
+//
+//		wdt_reset();
+//		usbPoll();
+//	}
+//
+//	return 0;
+//}
+
+#define START 0x08   
+#define ReSTART 0x10   
+#define MT_SLA_ACK 0x18   
+#define MT_DATA_ACK 0x28   
+   
+#define MR_SLA_ACK 0x40   
+#define MR_DATA_ACK 0x50   
+#define MR_DATA_NACK 0x58   
+   
+#define SLA_W 0xA0   
+#define SLA_R 0xA1   
+#define ADDRESS 0x00   
+#define DATA 0x55   
+
+void Error () {
+	unsigned i = 0;
+	for (i = 0; i < 3; i++) {
+		set_bit(PINB, 0);
+		_delay_ms(500);
+		clear_bit(PINB, 0);
+		_delay_ms(500);
+	}
+}
+
+void write_i2c (unsigned char address, unsigned char data) {
+	// start
+	TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
+	while (!(TWCR & (1<<TWINT)));
+	if ((TWSR & 0xF8) != START) return Error();   
+
+	TWDR = SLA_W;
+	TWCR = (1<<TWINT) | (1<<TWEN);   
+	while (!(TWCR & (1<<TWINT)));
+	if ((TWSR & 0xF8) != MT_SLA_ACK) return Error();   
+
+	// send address
+	TWDR = address;
+	TWCR = (1<<TWINT) | (1<<TWEN);   
+	while (!(TWCR & (1<<TWINT)));
+	if((TWSR & 0xF8) != MT_DATA_ACK) return Error();   
+
+	// send data
+	TWDR = data;
+	TWCR = (1<<TWINT) | (1<<TWEN);    
+	while (!(TWCR & (1<<TWINT)));
+	if ((TWSR & 0xF8) != MT_DATA_ACK) return Error();   
+
+	// stop
+	TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
+	_delay_ms(1);
+}
+
+int main (void) {
+	TWBR = 0x24;
+	TWSR = 0b00000001;
+	DDRB  = 0b11111111;
+	PORTB = 0b00000000;
+	sei();
+
+	_delay_ms(100);
+
+	write_i2c(0x7c, 0x38);
+//	write_i2c(0x7c, 0x39);
+//	write_i2c(0x7c, 0x14);
+//	write_i2c(0x7c, 0x70);
+//	write_i2c(0x7c, 0x56);
+//	write_i2c(0x7c, 0x6c);
+//	write_i2c(0x7c, 0x38);
+//	write_i2c(0x7c, 0x0c);
+//	write_i2c(0x7c, 0x01);
+//
+	for (;;) {
+	}
+}
