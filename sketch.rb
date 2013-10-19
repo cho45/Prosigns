@@ -28,6 +28,6 @@ device.open do |handle|
 		:bRequest      => USBRQ_HID_SET_REPORT,
 		:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportId & 0xff),
 		:wIndex        => 0x0000,
-		:dataOut       => "H",
+		:dataOut       => "JH1UMV",
 	)
 end

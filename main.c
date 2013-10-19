@@ -18,6 +18,15 @@
 #define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
 #define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
 
+#define SET_TONE(freq) \
+	if (freq) {\
+		TCCR1A = 0b01000001;\
+		OCR1A = F_CPU / CLOCK_DEVIDE / freq / 2;\
+		ICR1 = OCR1A / 2;\
+	} else {\
+		TCCR1A = 0b00000001;\
+	};
+
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
 
@@ -126,8 +135,17 @@ void setup_io () {
 	TCCR0A = 0b00000000;
 	TCCR0B = 0b00000011;
 	TIMSK0 = 0b00000001;
+	
+	/**
+	 * PWM
+	 */
+	// WGM13=1, WGM12=0, WGM11=0, WGM10=1
+	TCCR1A = 0b01000001;
+	TCCR1B = 0b00010011;
 
 	wdt_enable(WDTO_1S);
+
+	// USB
 
 	// display_write_data("USB.");
 	usbInit();
@@ -142,7 +160,7 @@ void setup_io () {
 	display_write_data("USB.....");
 	usbDeviceConnect();
 	sei();
-	// display_write_data("USB.....DONE");
+	display_write_data("USB.....DONE");
 }
 
 int main (void) {
@@ -152,6 +170,8 @@ int main (void) {
 	unsigned char current_bit;
 
 	setup_io();
+
+	unsigned char speed_unit = 100;
 
 	for (;;) {
 		if (send_buffer.size > 0) {
@@ -165,15 +185,18 @@ int main (void) {
 			display_write_data(buf);
 
 			for (i = current_bit; i >= 0; i--) {
-				if (bit_is_set(current_sign, i)) {
+				if ((current_sign >> i) & 1) {
 					set_bit(PORTB, PB0);
+					SET_TONE(600);
 				} else {
 					clear_bit(PORTB, PB0);
+					SET_TONE(0);
 				}
-				delay_ms(100);
+				delay_ms(speed_unit);
 			}
 			clear_bit(PORTB, PB0);
-			delay_ms(100 * 3);
+			SET_TONE(0);
+			delay_ms(speed_unit * 3);
 		}
 
 		wdt_reset();
