@@ -35,7 +35,7 @@ uint32_t NLZ (uint32_t x) {
  * Global variables
  */
 
-unsigned int timer;
+unsigned long timer;
 ringbuffer send_buffer;
 
 ISR(TIMER0_OVF_vect) {
@@ -43,7 +43,7 @@ ISR(TIMER0_OVF_vect) {
 }
 
 void delay_ms(unsigned int t) {
-	unsigned int end = timer + DURATION(t);
+	unsigned long end = timer + DURATION(t);
 	cli();
 	// ここの間に timer がすすんでオーバーフローすると死ぬ
 	while (end < timer) { // end is overflowed?
@@ -77,7 +77,6 @@ PROGMEM const char usbHidReportDescriptor[22] = {	 /* USB report descriptor */
 };
 
 unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
-	set_bit(PINB, 0);
 	return len;
 }
 
@@ -125,14 +124,14 @@ void setup_io () {
 	 * 16MHz  / 64 prescale / 8bit = 0.1msec
 	 */
 	TCCR0A = 0b00000000;
-	TCCR0B = 0b00000010;
+	TCCR0B = 0b00000011;
 	TIMSK0 = 0b00000001;
 
 	wdt_enable(WDTO_1S);
 
-	display_write_data("USB:INIT");
+	// display_write_data("USB.");
 	usbInit();
-	display_write_data("USB:DISCON");
+	// display_write_data("USB..");
 	usbDeviceDisconnect();
 
 	i = 0;
@@ -140,13 +139,14 @@ void setup_io () {
 		wdt_reset();
 		_delay_ms(1);
 	}
-	display_write_data("USB:CONNECT");
+	display_write_data("USB.....");
 	usbDeviceConnect();
 	sei();
+	// display_write_data("USB.....DONE");
 }
 
 int main (void) {
-	unsigned int i;
+	int i;
 	unsigned char character;
 	unsigned long current_sign;
 	unsigned char current_bit;
@@ -158,20 +158,22 @@ int main (void) {
 			character = ringbuffer_get(&send_buffer);
 			memcpy_PF(&current_sign, (uint_farptr_t)&MORSE_CODES[character], 4);
 
+			current_bit  = 32 - NLZ(current_sign);
+
 			char buf[100];
-			sprintf(buf, "%c %lx", character, current_sign);
+			sprintf(buf, "%c %lx %d", character, current_sign, current_bit);
 			display_write_data(buf);
 
-			current_bit  = 32 - NLZ(current_sign);
-			for (i = current_bit; i > 0; i--) {
-				if (bit_is_set(current_sign, current_bit)) {
-					set_bit(PINB, PB0);
+			for (i = current_bit; i >= 0; i--) {
+				if (bit_is_set(current_sign, i)) {
+					set_bit(PORTB, PB0);
 				} else {
-					clear_bit(PINB, PB0);
+					clear_bit(PORTB, PB0);
 				}
-				delay_ms(1000);
+				delay_ms(100);
 			}
-			delay_ms(1000 * 3);
+			clear_bit(PORTB, PB0);
+			delay_ms(100 * 3);
 		}
 
 		wdt_reset();
