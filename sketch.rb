@@ -20,7 +20,7 @@ class AVR_USB_CW
 	end
 
 	def queue(string)
-		until string.empty?
+		loop do
 			writable = 255 - device_queue_size
 			if writable.nonzero?
 				device.open do |handle|
@@ -35,7 +35,11 @@ class AVR_USB_CW
 					)
 				end
 			end
-			sleep 1
+			if string.empty?
+				break
+			else
+				sleep 1
+			end
 		end
 	end
 
@@ -66,7 +70,7 @@ cw.speed = 25
 #p cw.device_queue_size
 #cw.queue("JH1UMV")
 #p cw.device_queue_size
-#cw.queue("ABC" * 19)
+#cw.queue("E" * 300)
 #cw.queue("JH1UMV")
 
 #cw.queue("JH1UMV")
@@ -76,4 +80,6 @@ cw.speed = 25
 #cw.queue("7M4VJZ GM UR 599 BK")
 #cw.queue("BK UR RST 599 5NN BK")
 cw.queue("BK R 73 \x04 EE")
-#
+
+
+# cw.clear_device_buffer

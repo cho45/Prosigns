@@ -44,6 +44,8 @@ uint32_t NLZ (uint32_t x) {
 	return 31 - ("\0\1\2\xf\x1d\3\x17\x10\x1e\x1b\4\6\xc\x18\x8\x11\x1f\xe\x1c\x16\x1a\5\xb\7\xd\x15\x19\xa\x14\x9\x13\x12")[0x5763e69U * (x - (x >> 1)) >> 27];
 }
 
+void display_write_data (char* string);
+
 /**
  * Global variables
  */
@@ -76,6 +78,10 @@ ISR(TIMER0_COMPA_vect) {
 
 void delay_ms(unsigned int t) {
 	unsigned int end = timer + DURATION(t);
+
+//	char buf[100];
+//	sprintf(buf, "%u", end);
+//	display_write_data(buf);
 
 	cli();
 	// ここの間に timer がすすんでオーバーフローすると死ぬ
@@ -155,7 +161,7 @@ void display_write_instruction (unsigned char address, unsigned char data) {
 	i2c_write(0b10000000);
 	i2c_write(data);
 	i2c_stop();
-	delay_ms(1);
+	_delay_ms(1);
 }
 
 void display_write_data (char* string) {
@@ -173,7 +179,7 @@ void display_write_data (char* string) {
 	}
 	i2c_stop();
 
-	delay_ms(1);
+	_delay_ms(1);
 
 	i2c_start();
 	i2c_write(0x7c);
@@ -290,8 +296,17 @@ void setup_io () {
 
 	timer = 0;
 
+	/**
+	 * Data Direction Register: 0=input, 1=output
+	 * 必要なポートだけインプットポートにする。
+	 */
 	DDRB  = 0b11111111;
+	DDRC  = 0b11100111;
+	DDRD  = 0b11111001;
+
 	PORTB = 0b00000000;
+	PORTC = 0b00000000;
+	PORTD = 0b00000000;
 
 	/**
 	 * timer interrupt
