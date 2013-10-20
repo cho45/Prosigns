@@ -21,7 +21,7 @@
 #define SET_TONE(freq) \
 	if (freq) {\
 		TCCR1A = 0b01000001;\
-		OCR1A = F_CPU / CLOCK_DEVIDE / freq / 2;\
+		OCR1A = F_CPU / 256 / freq / 2;\
 		ICR1 = OCR1A / 2;\
 	} else {\
 		TCCR1A = 0b00000001;\
@@ -90,13 +90,10 @@ unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
 }
 
 unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
-	char tmp[255];
 	unsigned char i;
 	for (i = 0; i < len; i++) {
-		tmp[i] = data[i];
 		ringbuffer_put(&send_buffer, data[i]);
 	}
-	display_write_data(tmp);
 	return 1;
 }
 
@@ -130,7 +127,7 @@ void setup_io () {
 
 	/**
 	 * timer interrupt
-	 * 16MHz  / 64 prescale / 8bit = 0.1msec
+	 * 16MHz  / 8 prescale / 8bit = 0.128msec
 	 */
 	TCCR0A = 0b00000000;
 	TCCR0B = 0b00000011;
@@ -141,7 +138,7 @@ void setup_io () {
 	 */
 	// WGM13=1, WGM12=0, WGM11=0, WGM10=1
 	TCCR1A = 0b01000001;
-	TCCR1B = 0b00010011;
+	TCCR1B = 0b00010100;
 
 	wdt_enable(WDTO_1S);
 
@@ -176,27 +173,40 @@ int main (void) {
 	for (;;) {
 		if (send_buffer.size > 0) {
 			character = ringbuffer_get(&send_buffer);
-			memcpy_PF(&current_sign, (uint_farptr_t)&MORSE_CODES[character], 4);
-
-			current_bit  = 32 - NLZ(current_sign);
-
-			char buf[100];
-			sprintf(buf, "%c %lx %d", character, current_sign, current_bit);
-			display_write_data(buf);
-
-			for (i = current_bit; i >= 0; i--) {
-				if ((current_sign >> i) & 1) {
-					set_bit(PORTB, PB0);
-					SET_TONE(600);
-				} else {
-					clear_bit(PORTB, PB0);
-					SET_TONE(0);
+			if (character == ' ') {
+				delay_ms(speed_unit * 7);
+			} else
+			if (character == '\\') { // command prefix
+				character = ringbuffer_get(&send_buffer);
+				switch (character) {
+					case 's':
+						character = ringbuffer_get(&send_buffer);
+						speed_unit = 1200 / character;
+						break;
 				}
-				delay_ms(speed_unit);
+			} else {
+				memcpy_PF(&current_sign, (uint_farptr_t)&MORSE_CODES[character], 4);
+
+				current_bit  = 32 - NLZ(current_sign);
+
+//				char buf[100];
+//				sprintf(buf, "%c %lx %d", character, current_sign, current_bit);
+//				display_write_data(buf);
+
+				for (i = current_bit; i >= 0; i--) {
+					if ((current_sign >> i) & 1) {
+						set_bit(PORTB, PB0);
+						SET_TONE(600);
+					} else {
+						clear_bit(PORTB, PB0);
+						SET_TONE(0);
+					}
+					delay_ms(speed_unit);
+				}
+				clear_bit(PORTB, PB0);
+				SET_TONE(0);
+				delay_ms(speed_unit * 3);
 			}
-			clear_bit(PORTB, PB0);
-			SET_TONE(0);
-			delay_ms(speed_unit * 3);
 		}
 
 		wdt_reset();
