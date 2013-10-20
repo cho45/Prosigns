@@ -13,20 +13,6 @@ class AVR_USB_CW
 
 	def initialize
 		@usb = LIBUSB::Context.new
-		endpoint = nil
-		device.interfaces.each do |i|
-			endpoint = i.endpoints.first
-		end
-		device.open() do |handle|
-			handle.claim_interface(endpoint.interface)
-			p handle
-			p handle.interrupt_transfer(
-				:endpoint => endpoint,
-				:dataIn => 8,
-			) do |result|
-				p result
-			end
-		end
 	end
 
 	def device
@@ -34,39 +20,50 @@ class AVR_USB_CW
 	end
 
 	def queue(string)
-		return
-		device.open do |handle|
-			# reportNumber = 0
-			# read
-		#	p handle.control_transfer(
-		#		:bmRequestType => LIBUSB::REQUEST_TYPE_CLASS | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
-		#		:bRequest      => USBRQ_HID_GET_REPORT,
-		#		:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportNumber),
-		#		:wIndex        => 0x0000,
-		#		:dataIn        => 1,
-		#	)
-
-			# bytesSent = usb_control_msg((void *)device, USB_TYPE_CLASS | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, USBRQ_HID_SET_REPORT, USB_HID_REPORT_TYPE_FEATURE << 8 | (reportId & 0xff), 0, buffer, len, 5000);
-			reportId = 0
-			p handle.control_transfer(
-				:bmRequestType => LIBUSB::REQUEST_TYPE_CLASS | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-				:bRequest      => USBRQ_HID_SET_REPORT,
-				:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportId & 0xff),
-				:wIndex        => 0x0000,
-				:dataOut       => string,
-			)
+		until string.empty?
+			writable = 255 - device_queue_size
+			if writable.nonzero?
+				device.open do |handle|
+					# bytesSent = usb_control_msg((void *)device, USB_TYPE_CLASS | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, USBRQ_HID_SET_REPORT, USB_HID_REPORT_TYPE_FEATURE << 8 | (reportId & 0xff), 0, buffer, len, 5000);
+					reportId = 0
+					handle.control_transfer(
+						:bmRequestType => LIBUSB::REQUEST_TYPE_CLASS | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+						:bRequest      => USBRQ_HID_SET_REPORT,
+						:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportId & 0xff),
+						:wIndex        => 0x0000,
+						:dataOut       => string.slice!(0, writable),
+					)
+				end
+			end
+			sleep 1
 		end
 	end
 
 	def speed=(wpm)
 		queue("\\s#{wpm.chr}")
 	end
+
+	def device_queue_size
+		device.open do |handle|
+			reportNumber = 0
+			handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_CLASS | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+				:bRequest      => USBRQ_HID_GET_REPORT,
+				:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportNumber),
+				:wIndex        => 0x0000,
+				:dataIn        => 1,
+			).getbyte(0)
+		end
+	end
 end
 
 cw = AVR_USB_CW.new
-#cw.queue("E" * 255)
+p cw.device_queue_size
+cw.queue("JH1UMV")
+p cw.device_queue_size
+cw.queue("E" * 255)
+cw.queue("JH1UMV")
 
-#cw.queue("JH1UMV")
 #cw.queue("JH1UMV")
 # cw.speed = 35
 #cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")

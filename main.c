@@ -49,19 +49,19 @@ ringbuffer send_buffer;
 
 static inline void process_usb () {
 	usbPoll();
-	if (usbInterruptIsReady()) {
-		unsigned char p[] = {
-			0x00,
-			0x00,
-			0x00,
-			0x00,
-			0x00,
-			0x00,
-			0x00,
-			send_buffer.size,
-		};
-		usbSetInterrupt(p, 8);
-	}
+//	if (usbInterruptIsReady()) {
+//		unsigned char p[] = {
+//			0x00,
+//			0x00,
+//			0x00,
+//			0x00,
+//			0x00,
+//			0x00,
+//			0x00,
+//			send_buffer.size,
+//		};
+//		usbSetInterrupt(p, 8);
+//	}
 }
 
 
@@ -90,7 +90,7 @@ void delay_ms(unsigned int t) {
  * USB Control
  */
 
-PROGMEM const char usbHidReportDescriptor[30] = {	 /* USB report descriptor */
+PROGMEM const char usbHidReportDescriptor[22] = {	 /* USB report descriptor */
 	0x06, 0x00, 0xff, // USAGE_PAGE (Generic Desktop)
 	0x09, 0x01,       // USAGE (Vendor Usage 1)
 	0xa1, 0x01,       // COLLECTION (Application)
@@ -102,15 +102,11 @@ PROGMEM const char usbHidReportDescriptor[30] = {	 /* USB report descriptor */
 	0x09, 0x00,       //   USAGE (Undefined)
 	0xb2, 0x02, 0x01, //   FEATURE (Data,Var,Abs,Buf)
 
-	// interrupt
-	0x95, 0x08,       //   REPORT_COUNT (8)
-	0x09, 0x00,       //   USAGE (Undefined)
-	0x81, 0x02,       //   INPUT (Data,Var,Abs)
-
 	0xc0              // END_COLLECTION
 };
 
 unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
+	data[0] = send_buffer.size;
 	return len;
 }
 
