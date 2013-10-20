@@ -43,6 +43,10 @@ class AVR_USB_CW
 		queue("\\s#{wpm.chr}")
 	end
 
+	def clear_device_buffer
+		queue("\\c")
+	end
+
 	def device_queue_size
 		device.open do |handle|
 			reportNumber = 0
@@ -58,11 +62,12 @@ class AVR_USB_CW
 end
 
 cw = AVR_USB_CW.new
-p cw.device_queue_size
+cw.speed = 25
+#p cw.device_queue_size
 cw.queue("JH1UMV")
-p cw.device_queue_size
-cw.queue("E" * 255)
-cw.queue("JH1UMV")
+#p cw.device_queue_size
+#cw.queue("E" * 255)
+#cw.queue("JH1UMV")
 
 #cw.queue("JH1UMV")
 # cw.speed = 35

@@ -13,10 +13,13 @@
 #define clear_bit(v, bit) v &= ~(1 << bit)
 #define set_bit(v, bit)   v |=	(1 << bit)
 
+/*
 #define CLOCK_DEVIDE 64.0
 #define TIMER_INTERVAL (1.0 / (F_CPU / CLOCK_DEVIDE / 256) * 1000)
 #define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
 #define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
+*/
+#define DURATION(msec) (unsigned int)(msec * 100)
 
 #define SET_TONE(freq) \
 	if (freq) {\
@@ -43,8 +46,9 @@ uint32_t NLZ (uint32_t x) {
 /**
  * Global variables
  */
+unsigned char speed_unit = 100;
 
-unsigned long timer;
+volatile unsigned int timer;
 ringbuffer send_buffer;
 
 static inline void process_usb () {
@@ -65,12 +69,17 @@ static inline void process_usb () {
 }
 
 
-ISR(TIMER0_OVF_vect) {
-	timer++;
+ISR(TIMER0_COMPA_vect) {
+	timer += 100;
 }
 
 void delay_ms(unsigned int t) {
-	unsigned long end = timer + DURATION(t);
+	unsigned int end = timer + DURATION(t);
+
+	char buf[100];
+	sprintf(buf, "%u", timer);
+	display_write_data(buf);
+
 	cli();
 	// ここの間に timer がすすんでオーバーフローすると死ぬ
 	while (end < timer) { // end is overflowed?
@@ -80,7 +89,7 @@ void delay_ms(unsigned int t) {
 		cli();
 	}
 	sei();
-	while (timer <= end) {
+	while (timer < end) {
 		wdt_reset();
 		process_usb();
 	}
@@ -113,6 +122,19 @@ unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
 unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
 	unsigned char i;
 	for (i = 0; i < len; i++) {
+		if (data[i] == '\\') {
+			i++;
+			switch (data[i]) {
+				case 'c': // clear
+					ringbuffer_init(&send_buffer);
+					break;
+				case 's': // speed
+					i++;
+					speed_unit = 1200 / data[i];
+					break;
+			}
+			continue;
+		}
 		ringbuffer_put(&send_buffer, data[i]);
 	}
 	return 1;
@@ -148,11 +170,12 @@ void setup_io () {
 
 	/**
 	 * timer interrupt
-	 * 16MHz  / 8 prescale / 8bit = 0.128msec
+	 * CTC 1msec
 	 */
-	TCCR0A = 0b00000000;
+	TCCR0A = 0b00000010;
 	TCCR0B = 0b00000011;
-	TIMSK0 = 0b00000001;
+	OCR0A  = 250;
+	TIMSK0 = 0b00000010;
 	
 	/**
 	 * PWM
@@ -175,10 +198,9 @@ void setup_io () {
 		wdt_reset();
 		_delay_ms(1);
 	}
-	display_write_data("USB.....");
 	usbDeviceConnect();
 	sei();
-	display_write_data("USB.....DONE");
+	display_write_data("WAITING.");
 }
 
 int main (void) {
@@ -189,30 +211,19 @@ int main (void) {
 
 	setup_io();
 
-	unsigned char speed_unit = 100;
-
 	for (;;) {
 		if (send_buffer.size > 0) {
 			character = ringbuffer_get(&send_buffer);
 			if (character == ' ') {
 				delay_ms(speed_unit * 7);
-			} else
-			if (character == '\\') { // command prefix
-				character = ringbuffer_get(&send_buffer);
-				switch (character) {
-					case 's':
-						character = ringbuffer_get(&send_buffer);
-						speed_unit = 1200 / character;
-						break;
-				}
 			} else {
 				memcpy_PF(&current_sign, (uint_farptr_t)&MORSE_CODES[character], 4);
 
 				current_bit  = 32 - NLZ(current_sign);
 
-				char buf[100];
-				sprintf(buf, "%c %lx %d", character, current_sign, current_bit);
-				display_write_data(buf);
+//				char buf[100];
+//				sprintf(buf, "%c %lx %d", character, current_sign, current_bit);
+//				display_write_data(buf);
 
 				for (i = current_bit; i >= 0; i--) {
 					if ((current_sign >> i) & 1) {
