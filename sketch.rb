@@ -13,6 +13,20 @@ class AVR_USB_CW
 
 	def initialize
 		@usb = LIBUSB::Context.new
+		endpoint = nil
+		device.interfaces.each do |i|
+			endpoint = i.endpoints.first
+		end
+		device.open() do |handle|
+			handle.claim_interface(endpoint.interface)
+			p handle
+			p handle.interrupt_transfer(
+				:endpoint => endpoint,
+				:dataIn => 8,
+			) do |result|
+				p result
+			end
+		end
 	end
 
 	def device
@@ -20,6 +34,7 @@ class AVR_USB_CW
 	end
 
 	def queue(string)
+		return
 		device.open do |handle|
 			# reportNumber = 0
 			# read
@@ -53,8 +68,8 @@ cw = AVR_USB_CW.new
 
 #cw.queue("JH1UMV")
 #cw.queue("JH1UMV")
-cw.speed = 35
-cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
+# cw.speed = 35
+#cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
 #cw.queue("DE 7M4VJZ")
 #cw.queue("7M4VJZ GM UR 599 BK")
 #cw.queue("BK UR RST 599 5NN BK")
