@@ -200,8 +200,8 @@ void display_init () {
 	display_write_instruction(0x7c, 0b00111000); // function set to 0 (default)
 	display_write_instruction(0x7c, 0b00111001); // function set to 1 (extended)
 	display_write_instruction(0x7c, 0b00010100); // internal osc frequency
-	display_write_instruction(0x7c, 0b01110000); // contrast set
-	display_write_instruction(0x7c, 0b01010110); // power/icon/contrast control
+	display_write_instruction(0x7c, 0b01110100); // contrast set
+	display_write_instruction(0x7c, 0b01010100); // power/icon/contrast control
 	display_write_instruction(0x7c, 0b01101100); // follower control
 	_delay_ms(300);
 	display_write_instruction(0x7c, 0b00111000); // function seto to 0
