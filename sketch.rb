@@ -70,16 +70,17 @@ cw.speed = 25
 #p cw.device_queue_size
 #cw.queue("JH1UMV")
 #p cw.device_queue_size
-#cw.queue("H" * 300)
+#cw.queue("E" * 300)
 #cw.queue("JH1UMV")
 
 #cw.queue("JH1UMV")
-# cw.speed = 35
 #cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
 #cw.queue("DE 7M4VJZ")
 #cw.queue("7M4VJZ GM UR 599 BK")
-cw.queue("BK UR RST 599 5NN BK")
+#cw.queue("BK UR RST 599 5NN BK")
 #cw.queue("BK R 73 \x04 EE")
 
+cw.speed = 35
+cw.queue("CQ CQ TEST DE JH1UMV TEST K")
 
 #cw.clear_device_buffer

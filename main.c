@@ -56,19 +56,6 @@ ringbuffer send_buffer;
 
 static inline void process_usb () {
 	usbPoll();
-//	if (usbInterruptIsReady()) {
-//		unsigned char p[] = {
-//			0x00,
-//			0x00,
-//			0x00,
-//			0x00,
-//			0x00,
-//			0x00,
-//			0x00,
-//			send_buffer.size,
-//		};
-//		usbSetInterrupt(p, 8);
-//	}
 }
 
 
@@ -379,6 +366,7 @@ int main (void) {
 					}
 					delay_ms(speed_unit);
 				}
+				update_display();
 				clear_bit(PORTB, PB0);
 				SET_TONE(0);
 				delay_ms(speed_unit * 3);
