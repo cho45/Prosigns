@@ -4,8 +4,8 @@ require "libusb"
 
 class AVR_USB_CW
 
-	USBRQ_HID_GET_REPORT = 0x01
-	USBRQ_HID_SET_REPORT    = 0x09
+	USBRQ_HID_GET_REPORT        = 0x01
+	USBRQ_HID_SET_REPORT        = 0x09
 	USB_HID_REPORT_TYPE_FEATURE = 0x03
 
 	ID_VENDOR = 0x16c0
@@ -52,23 +52,33 @@ class AVR_USB_CW
 	end
 
 	def device_queue_size
+		device_status[:queue_size]
+	end
+
+	def device_status
+		status = nil
 		device.open do |handle|
 			reportNumber = 0
-			handle.control_transfer(
+			status = handle.control_transfer(
 				:bmRequestType => LIBUSB::REQUEST_TYPE_CLASS | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
 				:bRequest      => USBRQ_HID_GET_REPORT,
 				:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportNumber),
 				:wIndex        => 0x0000,
 				:dataIn        => 1,
-			).getbyte(0)
+			)
 		end
+		{
+			:queue_size => status.getbyte(0),
+			:speed      => status.getbyte(1),
+		}
 	end
 end
 
 cw = AVR_USB_CW.new
 cw.speed = 25
+cw.queue("EX EX EX VVV")
 #p cw.device_queue_size
-cw.queue("JH1UMV")
+#cw.queue("JH1UMV")
 #p cw.device_queue_size
 #cw.queue("E" * 300)
 #cw.queue("JH1UMV")

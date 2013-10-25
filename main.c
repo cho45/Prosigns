@@ -40,7 +40,8 @@ void display_write_data (char* string);
 /**
  * Global variables
  */
-unsigned char speed_unit = 100;
+unsigned char speed = 20;
+unsigned char speed_unit = 1200 / speed;
 
 volatile unsigned int timer;
 ringbuffer send_buffer;
@@ -233,6 +234,7 @@ PROGMEM const char usbHidReportDescriptor[22] = {	 /* USB report descriptor */
 
 unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
 	data[0] = send_buffer.size;
+	data[1] = speed;
 	return len;
 }
 
@@ -247,7 +249,8 @@ unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
 					break;
 				case 's': // speed
 					i++;
-					speed_unit = 1200 / data[i];
+					speed = data[i];
+					speed_unit = 1200 / speed;
 					break;
 			}
 			continue;
