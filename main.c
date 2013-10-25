@@ -15,6 +15,12 @@
 #define set_bit(v, bit)   v |=	(1 << bit)
 
 #define OUTPUT PB2
+#define INPUT_DOT PD6
+#define INPUT_DASH PD7
+
+#define INHIBIT_RATE 0.3
+#define INHIBIT_TIME(speed) ((unsigned int)(1200 * INHIBIT_RATE) / speed)
+#define INHIBIT_AFTER(speed) ((unsigned int)(1200 * (1 - INHIBIT_RATE)) / speed)
 
 /*
 #define CLOCK_DEVIDE 64.0
@@ -22,7 +28,7 @@
 #define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
 #define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
 */
-#define DURATION(msec) (unsigned int)(msec * 10)
+#define DURATION(msec) (unsigned int)(msec * 100)
 
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
@@ -44,6 +50,7 @@ void display_write_data (char* string);
  */
 volatile unsigned char speed;
 volatile unsigned char speed_unit;
+volatile unsigned char dot_keying, dash_keying;
 
 volatile unsigned int timer;
 ringbuffer send_buffer;
@@ -54,7 +61,15 @@ static inline void process_usb () {
 
 
 ISR(TIMER0_COMPA_vect) {
-	timer += 1;
+	timer += 10;
+
+	if (bit_is_clear(PIND, INPUT_DOT)) {
+		dot_keying = 1;
+	}
+
+	if (bit_is_clear(PIND, INPUT_DASH)) {
+		dash_keying = 1;
+	}
 }
 
 void delay_ms(unsigned int t) {
@@ -84,6 +99,16 @@ static inline void SET_TONE(unsigned int freq) {
 	} else {
 		TCCR1A = 0b00000001;
 	};
+}
+
+static inline void start_output() {
+	set_bit(PORTB, OUTPUT);
+	SET_TONE(600);
+}
+
+static inline void stop_output() {
+	clear_bit(PORTB, OUTPUT);
+	SET_TONE(0);
 }
 
 /***
@@ -295,11 +320,11 @@ void setup_io () {
 	 */
 	DDRB  = 0b11111111;
 	DDRC  = 0b11100111;
-	DDRD  = 0b11111001;
+	DDRD  = 0b00111001;
 
 	PORTB = 0b00000000;
 	PORTC = 0b00000000;
-	PORTD = 0b00000000;
+	PORTD = 0b11000000;
 
 	/**
 	 * timer interrupt
@@ -364,22 +389,37 @@ int main (void) {
 
 				for (i = current_bit; i >= 0; i--) {
 					if ((current_sign >> i) & 1) {
-						set_bit(PORTB, OUTPUT);
-						SET_TONE(600);
+						start_output();
 					} else {
-						clear_bit(PORTB, OUTPUT);
-						SET_TONE(0);
+						stop_output();
 					}
 					delay_ms(speed_unit);
 				}
 				update_display();
-				clear_bit(PORTB, OUTPUT);
-				SET_TONE(0);
+				stop_output();
 				delay_ms(speed_unit * 3);
 			}
 
 			if (!send_buffer.size) {
 				display_write_data("WAITING.");
+			}
+		} else {
+			if (dot_keying) {
+				start_output();
+				delay_ms(speed_unit);
+				stop_output();
+				delay_ms(INHIBIT_TIME(speed));
+				dot_keying = 0;
+				delay_ms(INHIBIT_AFTER(speed));
+			}
+
+			if (dash_keying) {
+				start_output();
+				delay_ms(speed_unit * 3);
+				stop_output();
+				delay_ms(INHIBIT_TIME(speed));
+				dash_keying = 0;
+				delay_ms(INHIBIT_AFTER(speed));
 			}
 		}
 

@@ -76,24 +76,23 @@ class AVR_USB_CW
 end
 
 cw = AVR_USB_CW.new
-cw.speed = 20
-cw.queue("ok")
+cw.speed = 18
 p cw.device_status
 require "readline"
 while l = Readline.readline("> ", true)
 	l.chomp!
 	case l
-	when /^\\s\s*(?<speed>\d+)/
+	when /^\\s\s*(?<speed>\d+)/i
 		cw.speed = Regexp.last_match[:speed].to_i
-	when /^\\c/
+	when /^\\c/i
 		cw.clear_device_buffer
-	when /^\\status/
+	when /^\\status/i
 		p cw.device_status
 	else
-		cw.queue(l)
+		cw.queue(l + " ")
 	end
 end
-#
+
 #cw.speed = 18
 ##cw.queue("EX EX EX VVV")
 ##p cw.device_queue_size

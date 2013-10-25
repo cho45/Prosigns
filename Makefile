@@ -73,7 +73,7 @@ clean:
 
 # file targets:
 main.elf: $(OBJECTS)
-	$(COMPILE) -o main.elf $(OBJECTS)
+	$(COMPILE) -o main.elf $(OBJECTS) -lm
 
 main.hex: main.elf
 	rm -f main.hex
