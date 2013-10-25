@@ -20,6 +20,7 @@ class AVR_USB_CW
 	end
 
 	def queue(string)
+		string.upcase!
 		loop do
 			writable = 255 - device_queue_size
 			if writable.nonzero?
@@ -44,11 +45,11 @@ class AVR_USB_CW
 	end
 
 	def speed=(wpm)
-		queue("\\s#{wpm.chr}")
+		queue("\\S#{wpm.chr}")
 	end
 
 	def clear_device_buffer
-		queue("\\c")
+		queue("\\C")
 	end
 
 	def device_queue_size
@@ -64,7 +65,7 @@ class AVR_USB_CW
 				:bRequest      => USBRQ_HID_GET_REPORT,
 				:wValue        => (USB_HID_REPORT_TYPE_FEATURE << 8 | reportNumber),
 				:wIndex        => 0x0000,
-				:dataIn        => 1,
+				:dataIn        => 8,
 			)
 		end
 		{
@@ -75,21 +76,39 @@ class AVR_USB_CW
 end
 
 cw = AVR_USB_CW.new
-cw.speed = 18
-#cw.queue("EX EX EX VVV")
-#p cw.device_queue_size
-#cw.queue("JH1UMV")
-#p cw.device_queue_size
-cw.queue("E" * 255)
-#cw.queue("JH1UMV")
-
-#cw.queue("JH1UMV")
-#cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
-#cw.queue("DE 7M4VJZ")
-#cw.queue("7M4VJZ GM UR 599 BK")
-#cw.queue("BK UR RST 599 5NN BK")
-#cw.queue("BK R 73 \x04 EE")
-
-#cw.queue("CQ CQ TEST DE JH1UMV TEST K")
-
-#cw.clear_device_buffer
+cw.speed = 20
+cw.queue("ok")
+p cw.device_status
+require "readline"
+while l = Readline.readline("> ", true)
+	l.chomp!
+	case l
+	when /^\\s\s*(?<speed>\d+)/
+		cw.speed = Regexp.last_match[:speed].to_i
+	when /^\\c/
+		cw.clear_device_buffer
+	when /^\\status/
+		p cw.device_status
+	else
+		cw.queue(l)
+	end
+end
+#
+#cw.speed = 18
+##cw.queue("EX EX EX VVV")
+##p cw.device_queue_size
+##cw.queue("JH1UMV")
+##p cw.device_queue_size
+#cw.queue("E" * 255)
+##cw.queue("JH1UMV")
+#
+##cw.queue("JH1UMV")
+##cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
+##cw.queue("DE 7M4VJZ")
+##cw.queue("7M4VJZ GM UR 599 BK")
+##cw.queue("BK UR RST 599 5NN BK")
+##cw.queue("BK R 73 \x04 EE")
+#
+##cw.queue("CQ CQ TEST DE JH1UMV TEST K")
+#
+##cw.clear_device_buffer

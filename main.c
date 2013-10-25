@@ -42,8 +42,8 @@ void display_write_data (char* string);
 /**
  * Global variables
  */
-unsigned char speed;
-unsigned char speed_unit;
+volatile unsigned char speed;
+volatile unsigned char speed_unit;
 
 volatile unsigned int timer;
 ringbuffer send_buffer;
@@ -246,10 +246,10 @@ unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
 		if (data[i] == '\\') {
 			i++;
 			switch (data[i]) {
-				case 'c': // clear
+				case 'C': // clear
 					ringbuffer_init(&send_buffer);
 					break;
-				case 's': // speed
+				case 'S': // speed
 					i++;
 					speed = data[i];
 					speed_unit = 1200 / speed;
