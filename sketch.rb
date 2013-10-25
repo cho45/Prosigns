@@ -75,12 +75,12 @@ class AVR_USB_CW
 end
 
 cw = AVR_USB_CW.new
-cw.speed = 25
-cw.queue("EX EX EX VVV")
+cw.speed = 18
+#cw.queue("EX EX EX VVV")
 #p cw.device_queue_size
 #cw.queue("JH1UMV")
 #p cw.device_queue_size
-#cw.queue("E" * 300)
+cw.queue("E" * 255)
 #cw.queue("JH1UMV")
 
 #cw.queue("JH1UMV")

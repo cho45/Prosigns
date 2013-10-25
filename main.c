@@ -22,7 +22,7 @@
 #define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
 #define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
 */
-#define DURATION(msec) (unsigned int)(msec * 100)
+#define DURATION(msec) (unsigned int)(msec * 10)
 
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
@@ -54,7 +54,7 @@ static inline void process_usb () {
 
 
 ISR(TIMER0_COMPA_vect) {
-	timer += 100;
+	timer += 1;
 }
 
 void delay_ms(unsigned int t) {
@@ -303,11 +303,11 @@ void setup_io () {
 
 	/**
 	 * timer interrupt
-	 * CTC 1msec
+	 * CTC 0.1msec
 	 */
 	TCCR0A = 0b00000010;
 	TCCR0B = 0b00000011;
-	OCR0A  = 250;
+	OCR0A  = 25;
 	TIMSK0 = 0b00000010;
 	
 	/**
@@ -376,6 +376,10 @@ int main (void) {
 				clear_bit(PORTB, OUTPUT);
 				SET_TONE(0);
 				delay_ms(speed_unit * 3);
+			}
+
+			if (!send_buffer.size) {
+				display_write_data("WAITING.");
 			}
 		}
 
