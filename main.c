@@ -22,15 +22,6 @@
 */
 #define DURATION(msec) (unsigned int)(msec * 100)
 
-#define SET_TONE(freq) \
-	if (freq) {\
-		TCCR1A = 0b01000001;\
-		OCR1A = F_CPU / 256 / freq / 2;\
-		ICR1 = OCR1A / 2;\
-	} else {\
-		TCCR1A = 0b00000001;\
-	};
-
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
 
@@ -64,13 +55,10 @@ ISR(TIMER0_COMPA_vect) {
 }
 
 void delay_ms(unsigned int t) {
-	unsigned int end = timer + DURATION(t);
-
-//	char buf[100];
-//	sprintf(buf, "%u", end);
-//	display_write_data(buf);
+	unsigned int end;
 
 	cli();
+	end = timer + DURATION(t);
 	// ここの間に timer がすすんでオーバーフローすると死ぬ
 	while (end < timer) { // end is overflowed?
 		sei();
@@ -85,24 +73,34 @@ void delay_ms(unsigned int t) {
 	}
 }
 
+static inline void SET_TONE(unsigned int freq) {
+	if (freq) {
+		TCCR1A = 0b01000001;
+		OCR1A = F_CPU / 256 / freq / 2;
+		ICR1 = OCR1A / 2;
+	} else {
+		TCCR1A = 0b00000001;
+	};
+}
+
 /***
  * I2C Display
  *
  */
 
-#define START 0x08   
-#define ReSTART 0x10   
-#define MT_SLA_ACK 0x18   
-#define MT_DATA_ACK 0x28   
-   
-#define MR_SLA_ACK 0x40   
-#define MR_DATA_ACK 0x50   
-#define MR_DATA_NACK 0x58   
-   
-#define SLA_W 0xA0   
-#define SLA_R 0xA1   
-#define ADDRESS 0x00   
-#define DATA 0x55   
+#define START 0x08
+#define ReSTART 0x10
+#define MT_SLA_ACK 0x18
+#define MT_DATA_ACK 0x28
+
+#define MR_SLA_ACK 0x40
+#define MR_DATA_ACK 0x50
+#define MR_DATA_NACK 0x58
+
+#define SLA_W 0xA0
+#define SLA_R 0xA1
+#define ADDRESS 0x00
+#define DATA 0x55
 
 void Error () {
 //	unsigned i = 0;
@@ -191,7 +189,7 @@ void display_init () {
 	display_write_instruction(0x7c, 0b01010100); // power/icon/contrast control
 	display_write_instruction(0x7c, 0b01101100); // follower control
 	_delay_ms(300);
-	display_write_instruction(0x7c, 0b00111000); // function seto to 0
+	display_write_instruction(0x7c, 0b00111000); // function set to 0
 	display_write_instruction(0x7c, 0b00001101); // display on/off control
 	display_write_instruction(0x7c, 0b00000001); // clear all
 
@@ -348,7 +346,7 @@ int main (void) {
 			if (character == ' ') {
 				delay_ms(speed_unit * 7);
 			} else {
-				memcpy_PF(&current_sign, (uint_farptr_t)&MORSE_CODES[character], 4);
+				memcpy_PF(&current_sign, (uint_farptr_t)(unsigned int)&MORSE_CODES[character], 4);
 
 				current_bit  = 32 - NLZ(current_sign);
 

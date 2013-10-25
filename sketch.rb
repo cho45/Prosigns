@@ -68,7 +68,7 @@ end
 cw = AVR_USB_CW.new
 cw.speed = 25
 #p cw.device_queue_size
-#cw.queue("JH1UMV")
+cw.queue("JH1UMV")
 #p cw.device_queue_size
 #cw.queue("E" * 300)
 #cw.queue("JH1UMV")
@@ -80,7 +80,6 @@ cw.speed = 25
 #cw.queue("BK UR RST 599 5NN BK")
 #cw.queue("BK R 73 \x04 EE")
 
-cw.speed = 35
-cw.queue("CQ CQ TEST DE JH1UMV TEST K")
+#cw.queue("CQ CQ TEST DE JH1UMV TEST K")
 
 #cw.clear_device_buffer
