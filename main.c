@@ -14,6 +14,8 @@
 #define clear_bit(v, bit) v &= ~(1 << bit)
 #define set_bit(v, bit)   v |=	(1 << bit)
 
+#define OUTPUT PB2
+
 /*
 #define CLOCK_DEVIDE 64.0
 #define TIMER_INTERVAL (1.0 / (F_CPU / CLOCK_DEVIDE / 256) * 1000)
@@ -40,8 +42,8 @@ void display_write_data (char* string);
 /**
  * Global variables
  */
-unsigned char speed = 20;
-unsigned char speed_unit = 1200 / speed;
+unsigned char speed;
+unsigned char speed_unit;
 
 volatile unsigned int timer;
 ringbuffer send_buffer;
@@ -277,6 +279,9 @@ usbMsgLen_t usbFunctionSetup(unsigned char data[8]) {
 }
 
 void setup_io () {
+	speed = 20;
+	speed_unit = 1200 / speed;
+
 	unsigned char i;
 
 	ringbuffer_init(&send_buffer);
@@ -359,16 +364,16 @@ int main (void) {
 
 				for (i = current_bit; i >= 0; i--) {
 					if ((current_sign >> i) & 1) {
-						set_bit(PORTB, PB0);
+						set_bit(PORTB, OUTPUT);
 						SET_TONE(600);
 					} else {
-						clear_bit(PORTB, PB0);
+						clear_bit(PORTB, OUTPUT);
 						SET_TONE(0);
 					}
 					delay_ms(speed_unit);
 				}
 				update_display();
-				clear_bit(PORTB, PB0);
+				clear_bit(PORTB, OUTPUT);
 				SET_TONE(0);
 				delay_ms(speed_unit * 3);
 			}
