@@ -28,7 +28,7 @@
 #define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
 #define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
 */
-#define DURATION(msec) (unsigned int)(msec * 100)
+#define DURATION(msec) (unsigned int)(msec * 50)
 
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
@@ -51,6 +51,7 @@ void display_write_data (char* string);
 volatile unsigned char speed;
 volatile unsigned char speed_unit;
 volatile unsigned char dot_keying, dash_keying;
+volatile unsigned int tone;
 
 volatile unsigned int timer;
 ringbuffer send_buffer;
@@ -103,7 +104,7 @@ static inline void SET_TONE(unsigned int freq) {
 
 static inline void start_output() {
 	set_bit(PORTB, OUTPUT);
-	SET_TONE(600);
+	SET_TONE(tone);
 }
 
 static inline void stop_output() {
@@ -275,9 +276,12 @@ unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
 					ringbuffer_init(&send_buffer);
 					break;
 				case 'S': // speed
-					i++;
-					speed = data[i];
+					speed = data[++i];
 					speed_unit = 1200 / speed;
+					break;
+				case 'T': // tone
+					tone  = data[++i];
+					tone |= (data[++i]<<8);
 					break;
 			}
 			continue;
@@ -306,6 +310,7 @@ usbMsgLen_t usbFunctionSetup(unsigned char data[8]) {
 void setup_io () {
 	speed = 20;
 	speed_unit = 1200 / speed;
+	tone = 600;
 
 	unsigned char i;
 
@@ -329,10 +334,11 @@ void setup_io () {
 	/**
 	 * timer interrupt
 	 * CTC 0.1msec
+	 * F_CPU / 64 / OCR0A
 	 */
 	TCCR0A = 0b00000010;
 	TCCR0B = 0b00000011;
-	OCR0A  = 25;
+	OCR0A  = 50;
 	TIMSK0 = 0b00000010;
 	
 	/**

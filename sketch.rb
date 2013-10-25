@@ -48,6 +48,10 @@ class AVR_USB_CW
 		queue("\\S#{wpm.chr}")
 	end
 
+	def tone=(tone)
+		queue("\\T#{[tone.to_i].pack("v")}")
+	end
+
 	def clear_device_buffer
 		queue("\\C")
 	end
@@ -76,25 +80,28 @@ class AVR_USB_CW
 end
 
 cw = AVR_USB_CW.new
-cw.speed = 18
-p cw.device_status
-require "readline"
-while l = Readline.readline("> ", true)
-	l.chomp!
-	case l
-	when /^\\s\s*(?<speed>\d+)/i
-		cw.speed = Regexp.last_match[:speed].to_i
-	when /^\\c/i
-		cw.clear_device_buffer
-	when /^\\status/i
-		p cw.device_status
-	else
-		cw.queue(l + " ")
-	end
-end
+cw.speed = 20
+#p cw.device_status
+#require "readline"
+#while l = Readline.readline("> ", true)
+#	l.chomp!
+#	case l
+#	when /^\\s\s*(?<speed>\d+)/i
+#		cw.speed = Regexp.last_match[:speed].to_i
+#	when /^\\t\s*(?<tone>\d+)/i
+#		cw.tone = Regexp.last_match[:tone].to_i
+#	when /^\\c/i
+#		cw.clear_device_buffer
+#	when /^\\status/i
+#		p cw.device_status
+#	else
+#		cw.queue(l + " ")
+#	end
+#end
 
-#cw.speed = 18
-##cw.queue("EX EX EX VVV")
+#cw.queue(" " * 255)
+#cw.clear_device_buffer
+
 ##p cw.device_queue_size
 ##cw.queue("JH1UMV")
 ##p cw.device_queue_size
