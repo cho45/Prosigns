@@ -28,7 +28,7 @@
 #define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
 #define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
 */
-#define DURATION(msec) (unsigned int)(msec * 50)
+#define DURATION(msec) (unsigned int)(msec * 25)
 
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
@@ -338,7 +338,7 @@ void setup_io () {
 	 */
 	TCCR0A = 0b00000010;
 	TCCR0B = 0b00000011;
-	OCR0A  = 50;
+	OCR0A  = 100;
 	TIMSK0 = 0b00000010;
 	
 	/**

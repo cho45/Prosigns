@@ -22,7 +22,7 @@ class AVR_USB_CW
 	def queue(string)
 		string.upcase!
 		loop do
-			writable = 255 - device_queue_size
+			writable = 255 - device_queue_size - 1
 			if writable.nonzero?
 				device.open do |handle|
 					# bytesSent = usb_control_msg((void *)device, USB_TYPE_CLASS | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, USBRQ_HID_SET_REPORT, USB_HID_REPORT_TYPE_FEATURE << 8 | (reportId & 0xff), 0, buffer, len, 5000);
@@ -79,8 +79,24 @@ class AVR_USB_CW
 	end
 end
 
+require "curses"
+
 cw = AVR_USB_CW.new
+cw.clear_device_buffer
 cw.speed = 20
+Curses.init_screen
+begin
+	while c = Curses.getch
+		begin
+			cw.queue(c.chr)
+		rescue => e
+			p e
+		end
+	end
+ensure
+	Curses.close_screen
+end
+
 #p cw.device_status
 #require "readline"
 #while l = Readline.readline("> ", true)
