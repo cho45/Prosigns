@@ -283,6 +283,10 @@ unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
 					tone  = data[++i];
 					tone |= (data[++i]<<8);
 					break;
+				case 0x08: // BS
+					send_buffer.write_index--;
+					send_buffer.size--;
+					break;
 			}
 			continue;
 		}

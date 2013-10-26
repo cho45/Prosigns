@@ -82,20 +82,21 @@ end
 require "curses"
 
 cw = AVR_USB_CW.new
-cw.clear_device_buffer
-cw.speed = 20
-Curses.init_screen
-begin
-	while c = Curses.getch
-		begin
-			cw.queue(c.chr)
-		rescue => e
-			p e
-		end
-	end
-ensure
-	Curses.close_screen
-end
+
+#cw.clear_device_buffer
+#cw.speed = 20
+#Curses.init_screen
+#begin
+#	while c = Curses.getch
+#		begin
+#			cw.queue(c.chr)
+#		rescue => e
+#			p e
+#		end
+#	end
+#ensure
+#	Curses.close_screen
+#end
 
 #p cw.device_status
 #require "readline"
@@ -125,7 +126,7 @@ end
 ##cw.queue("JH1UMV")
 #
 ##cw.queue("JH1UMV")
-##cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
+cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
 ##cw.queue("DE 7M4VJZ")
 ##cw.queue("7M4VJZ GM UR 599 BK")
 ##cw.queue("BK UR RST 599 5NN BK")
