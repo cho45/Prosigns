@@ -10,6 +10,7 @@
 #include "codes.h"
 #include "ringbuffer.h"
 #include "i2c_display.h"
+#include "uart.h"
 
 #define clear_bit(v, bit) v &= ~(1 << bit)
 #define set_bit(v, bit)   v |=	(1 << bit)
@@ -355,11 +356,13 @@ void setup_io () {
 
 	wdt_enable(WDTO_1S);
 
+	uart_init(19200);
+
 	// USB
 
-	// display_write_data("USB.");
+	uart_puts("usbInit");
 	usbInit();
-	// display_write_data("USB..");
+	uart_puts("usbDeviceDisconnect");
 	usbDeviceDisconnect();
 
 	i = 0;
@@ -367,6 +370,7 @@ void setup_io () {
 		wdt_reset();
 		_delay_ms(1);
 	}
+	uart_puts("usbDeviceConnect");
 	usbDeviceConnect();
 	sei();
 
