@@ -21,8 +21,8 @@ void uart_init(unsigned short baudrate) {
 	UBRR0H = d >> 8;
 
 	UCSR0B =
-		(1<<RXCIE0) | // RX Complete Interrupt Enable
-		(1<<TXCIE0) | // TX Complete Interrupt Enable
+		(0<<RXCIE0) | // RX Complete Interrupt Enable
+		(0<<TXCIE0) | // TX Complete Interrupt Enable
 		(0<<UDRIE0) | // USART Data Register Empty Interrupt Enable
 		(1<<RXEN0)  | // Receiver Enable
 		(1<<TXEN0)  | // Transmitter Enable
