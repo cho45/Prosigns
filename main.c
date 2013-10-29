@@ -76,17 +76,12 @@ ISR(TIMER0_COMPA_vect) {
 
 void delay_ms(unsigned int t) {
 	unsigned int end;
-
-	cli();
+	// DURATION(1) が timer でインクリメントされる数よりも小さいと overflow したときおかしくなる
 	end = timer + DURATION(t);
-	// ここの間に timer がすすんでオーバーフローすると死ぬ
 	while (end < timer) { // end is overflowed?
-		sei();
 		wdt_reset();
 		process_usb();
-		cli();
 	}
-	sei();
 	while (timer < end) {
 		wdt_reset();
 		process_usb();
@@ -415,6 +410,7 @@ int main (void) {
 			}
 
 			if (!send_buffer.size) {
+				uart_puts("Buffer Empty");
 				display_write_data("WAITING.");
 			}
 		} else {
