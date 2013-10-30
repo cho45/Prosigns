@@ -32,7 +32,7 @@ else
 COMPILE_OPT = -Os -g3 -gdwarf-2
 endif
 
-AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE)
+AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -B 3
 COMPILE = avr-gcc -Wl,--relax,--gc-sections -Wall $(COMPILE_OPT) -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
 
 # symbolic targets:

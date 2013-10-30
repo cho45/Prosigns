@@ -20,16 +20,16 @@
 #define INPUT_DASH PD7
 
 #define INHIBIT_RATE 0.3
-#define INHIBIT_TIME(speed) ((unsigned int)(1200 * INHIBIT_RATE) / speed)
-#define INHIBIT_AFTER(speed) ((unsigned int)(1200 * (1 - INHIBIT_RATE)) / speed)
+#define INHIBIT_TIME(speed) ((uint16_t)(1200 * INHIBIT_RATE) / speed)
+#define INHIBIT_AFTER(speed) ((uint16_t)(1200 * (1 - INHIBIT_RATE)) / speed)
 
 /*
 #define CLOCK_DEVIDE 64.0
 #define TIMER_INTERVAL (1.0 / (F_CPU / CLOCK_DEVIDE / 256) * 1000)
-#define INTERVAL_UNIT_IN_MS (unsigned int)(1.0 / TIMER_INTERVAL + 0.5)
-#define DURATION(msec) (unsigned int)(msec * INTERVAL_UNIT_IN_MS)
+#define INTERVAL_UNIT_IN_MS (uint16_t)(1.0 / TIMER_INTERVAL + 0.5)
+#define DURATION(msec) (uint16_t)(msec * INTERVAL_UNIT_IN_MS)
 */
-#define DURATION(msec) (unsigned int)(msec * 25)
+#define DURATION(msec) (uint16_t)(msec * 25)
 
 #include "usbdrv/usbdrv.h"
 #include "usbdrv/oddebug.h"
@@ -49,12 +49,12 @@ void display_write_data (char* string);
 /**
  * Global variables
  */
-volatile unsigned char speed;
-volatile unsigned char speed_unit;
-volatile unsigned char dot_keying, dash_keying;
-volatile unsigned int tone;
+volatile uint8_t speed;
+volatile uint8_t speed_unit;
+volatile uint8_t dot_keying, dash_keying;
+volatile uint16_t tone;
 
-volatile unsigned int timer;
+volatile uint16_t timer;
 ringbuffer send_buffer;
 
 static inline void process_usb () {
@@ -74,21 +74,19 @@ ISR(TIMER0_COMPA_vect) {
 	}
 }
 
-void delay_ms(unsigned int t) {
-	unsigned int end;
-	// DURATION(1) が timer でインクリメントされる数よりも小さいと overflow したときおかしくなる
+void delay_ms(uint16_t t) {
+	uint16_t end;
+	cli();
+	timer = 0;
 	end = timer + DURATION(t);
-	while (end < timer) { // end is overflowed?
-		wdt_reset();
-		process_usb();
-	}
+	sei();
 	while (timer < end) {
 		wdt_reset();
 		process_usb();
 	}
 }
 
-static inline void SET_TONE(unsigned int freq) {
+static inline void SET_TONE(uint16_t freq) {
 	if (freq) {
 		TCCR1A = 0b01000001;
 		OCR1A = F_CPU / 256 / freq / 2;
@@ -149,7 +147,7 @@ void i2c_stop () {
 	TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
 }
 
-unsigned char i2c_write (unsigned char data) {
+uint8_t i2c_write (uint8_t data) {
 	TWDR = data;
 	TWCR = (1<<TWINT) | (1<<TWEN);
 	while (!(TWCR & (1<<TWINT)));
@@ -165,7 +163,7 @@ unsigned char i2c_write (unsigned char data) {
 	}
 }
 
-void display_write_instruction (unsigned char address, unsigned char data) {
+void display_write_instruction (uint8_t address, uint8_t data) {
 	i2c_start();
 	i2c_write(address);
 	i2c_write(0b10000000);
@@ -175,8 +173,8 @@ void display_write_instruction (unsigned char address, unsigned char data) {
 }
 
 void display_write_data (char* string) {
-	unsigned int i = 0;
-	unsigned int len = strlen(string);
+	uint16_t i = 0;
+	uint16_t len = strlen(string);
 
 	display_write_instruction(0x7c, 0b00000001);
 
@@ -223,8 +221,8 @@ void display_init () {
 
 
 void update_display () {
-	unsigned char index;
-	unsigned char i;
+	uint8_t index;
+	uint8_t i;
 	char buf[16];
 	memset(buf, 0, sizeof(buf));
 
@@ -256,14 +254,14 @@ PROGMEM const char usbHidReportDescriptor[22] = {	 /* USB report descriptor */
 	0xc0              // END_COLLECTION
 };
 
-unsigned char usbFunctionRead (unsigned char* data, unsigned char len) {
+uint8_t usbFunctionRead (uint8_t* data, uint8_t len) {
 	data[0] = send_buffer.size;
 	data[1] = speed;
 	return len;
 }
 
-unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
-	unsigned char i;
+uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
+	uint8_t i;
 	for (i = 0; i < len; i++) {
 		if (data[i] == '\\') {
 			i++;
@@ -291,7 +289,7 @@ unsigned char usbFunctionWrite (unsigned char* data, unsigned char len) {
 	return 1;
 }
 
-usbMsgLen_t usbFunctionSetup(unsigned char data[8]) {
+usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	usbRequest_t* rq = (void*)data;
 
 	if ((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS) {
@@ -312,7 +310,7 @@ void setup_io () {
 	speed_unit = 1200 / speed;
 	tone = 600;
 
-	unsigned char i;
+	uint8_t i;
 
 	ringbuffer_init(&send_buffer);
 	_delay_ms(10);
@@ -375,9 +373,9 @@ void setup_io () {
 
 int main (void) {
 	int i;
-	unsigned char character;
-	unsigned long current_sign;
-	unsigned char current_bit;
+	uint8_t character;
+	uint32_t current_sign;
+	uint8_t current_bit;
 
 	setup_io();
 
@@ -388,7 +386,7 @@ int main (void) {
 			if (character == ' ') {
 				delay_ms(speed_unit * 7);
 			} else {
-				memcpy_PF(&current_sign, (uint_farptr_t)(unsigned int)&MORSE_CODES[character], 4);
+				memcpy_PF(&current_sign, (uint_farptr_t)(uint16_t)&MORSE_CODES[character], 4);
 
 				current_bit  = 32 - NLZ(current_sign);
 
