@@ -2,6 +2,75 @@
 
 require "libusb"
 
+ID_VENDOR = 0x16c0
+ID_PRODUCT = 0x05dc
+
+USB_REQ_TEST = 1
+USB_REQ_SEND = 2
+
+@usb = LIBUSB::Context.new
+@device ||= @usb.devices(:idVendor => ID_VENDOR, :idProduct => ID_PRODUCT).first or raise "Device Not Found"
+p @device
+@device.open do |handle|
+	p handle
+	# handle.set_configuration(1)
+	handle.claim_interface(0)
+	reportId = 0
+#	p handle.control_transfer(
+#		:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT | LIBUSB::ENDPOINT_IN,
+#		:bRequest      => USB_REQ_TEST,
+#		:wValue        => 0xfbf0,
+#		:wIndex        => 0x0000,
+#		:dataIn        => 4,
+#		#:dataOut       => "foobar",
+#	)
+
+	buffer = []
+	
+	Thread.start do
+		loop do
+			buffer << "\\S#{35.chr}CQ CQ DE JH1UMV JH1UMV PSE K "
+			break
+		end
+	end
+
+	Thread.start do
+		loop do
+			begin
+				# max 8bytes
+				p handle.interrupt_transfer(
+					:endpoint => LIBUSB::ENDPOINT_IN | 1,
+					:dataIn   => 8,
+					#:dataOut  => 'xxx',
+					:timeout  => 2000,
+				)
+			rescue LIBUSB::ERROR_TIMEOUT
+			end
+		end
+	end
+
+
+	loop do
+		begin
+			unless buffer.empty?
+				p buffer.size
+				# max 254bytes
+				p handle.control_transfer(
+					:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+					:bRequest      => USB_REQ_SEND,
+					:wValue        => 0x0000,
+					:wIndex        => 0x0000,
+					:dataOut       => buffer.shift
+				)
+			end
+			sleep 0.1
+		rescue => e
+			p e
+		end
+	end
+end
+
+__END__
 class AVR_USB_CW
 
 	USBRQ_HID_GET_REPORT        = 0x01
@@ -83,8 +152,8 @@ require "curses"
 
 cw = AVR_USB_CW.new
 
-#cw.clear_device_buffer
-#cw.speed = 20
+cw.clear_device_buffer
+cw.speed = 20
 #Curses.init_screen
 #begin
 #	while c = Curses.getch
@@ -98,7 +167,7 @@ cw = AVR_USB_CW.new
 #	Curses.close_screen
 #end
 
-#p cw.device_status
+p cw.device_status
 #require "readline"
 #while l = Readline.readline("> ", true)
 #	l.chomp!
@@ -120,13 +189,13 @@ cw = AVR_USB_CW.new
 #cw.clear_device_buffer
 
 ##p cw.device_queue_size
-##cw.queue("JH1UMV")
+cw.queue("JH1UMV")
 ##p cw.device_queue_size
 #cw.queue("E" * 255)
 ##cw.queue("JH1UMV")
 #
 ##cw.queue("JH1UMV")
-cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
+#cw.queue("CQ CQ CQ DE JH1UMV JH1UMV PSE K")
 ##cw.queue("DE 7M4VJZ")
 ##cw.queue("7M4VJZ GM UR 599 BK")
 ##cw.queue("BK UR RST 599 5NN BK")

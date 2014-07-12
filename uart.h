@@ -1,3 +1,4 @@
+
 static inline void uart_putchar(char c) {
 	loop_until_bit_is_set(UCSR0A, UDRE0);
 	UDR0 = c;
@@ -37,3 +38,4 @@ void uart_init(unsigned short baudrate) {
 		(1<<UCSZ01)|(1<<UCSZ00) | // Character Size (with UCSRB)
 		(0<<UCPOL0)             ; // Clock Polarity
 }
+

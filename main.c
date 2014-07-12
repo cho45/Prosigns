@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <avr/wdt.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -7,10 +8,15 @@
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
 #include <avr/pgmspace.h>
-#include "codes.h"
+
 #include "ringbuffer.h"
-#include "i2c_display.h"
+#include "morse.h"
 #include "uart.h"
+#include "nlz.h"
+
+#include "usbdrv/usbdrv.h"
+#include "usbdrv/oddebug.h"
+#include "usb_requests.h"
 
 #define clear_bit(v, bit) v &= ~(1 << bit)
 #define set_bit(v, bit)   v |=	(1 << bit)
@@ -23,28 +29,8 @@
 #define INHIBIT_TIME(speed) ((uint16_t)(1200 * INHIBIT_RATE) / speed)
 #define INHIBIT_AFTER(speed) ((uint16_t)(1200 * (1 - INHIBIT_RATE)) / speed)
 
-/*
-#define CLOCK_DEVIDE 64.0
-#define TIMER_INTERVAL (1.0 / (F_CPU / CLOCK_DEVIDE / 256) * 1000)
-#define INTERVAL_UNIT_IN_MS (uint16_t)(1.0 / TIMER_INTERVAL + 0.5)
-#define DURATION(msec) (uint16_t)(msec * INTERVAL_UNIT_IN_MS)
-*/
-#define DURATION(msec) (uint16_t)(msec * 25)
+#define DURATION(msec) (uint16_t)(msec)
 
-#include "usbdrv/usbdrv.h"
-#include "usbdrv/oddebug.h"
-
-uint32_t NLZ (uint32_t x) {
-	if (x == 0) { return 32; }
-	x = x | (x >> 1);
-	x = x | (x >> 2);
-	x = x | (x >> 4);
-	x = x | (x >> 8);
-	x = x | (x >>16);
-	return 31 - ("\0\1\2\xf\x1d\3\x17\x10\x1e\x1b\4\6\xc\x18\x8\x11\x1f\xe\x1c\x16\x1a\5\xb\7\xd\x15\x19\xa\x14\x9\x13\x12")[0x5763e69U * (x - (x >> 1)) >> 27];
-}
-
-void display_write_data (char* string);
 
 /**
  * Global variables
@@ -55,15 +41,42 @@ volatile uint8_t dot_keying, dash_keying;
 volatile uint16_t tone;
 
 volatile uint16_t timer;
+ringbuffer recv_buffer;
+uint8_t recv_buffer_data[128];
+uint8_t bytesRemaining;
+
 ringbuffer send_buffer;
+uint8_t send_buffer_data[128];
+
+uint8_t sent_data[8];
+uint8_t sent_data_length;
+
+uint8_t getInterruptData (uint8_t** p) {
+	static uint8_t buffer[8];
+	uint8_t len;
+	*p = buffer;
+	for (len = 0; len < 8; len++) {
+		if (send_buffer.size) {
+			buffer[len] = ringbuffer_get(&send_buffer);
+		} else {
+			break;
+		}
+	}
+	return len;
+}
 
 static inline void process_usb () {
 	usbPoll();
+	if (usbInterruptIsReady()) {               // only if previous data was sent
+		uint8_t* p;
+		uint8_t len = getInterruptData(&p);   // obtain chunk of max 8 bytes
+		if (len > 0)                         // only send if we have data
+			usbSetInterrupt(p, len);
+	}
 }
 
-
 ISR(TIMER0_COMPA_vect) {
-	timer += 10;
+	timer += 1;
 
 	if (bit_is_clear(PIND, INPUT_DOT)) {
 		dot_keying = 1;
@@ -76,10 +89,8 @@ ISR(TIMER0_COMPA_vect) {
 
 void delay_ms(uint16_t t) {
 	uint16_t end;
-	cli();
 	timer = 0;
 	end = timer + DURATION(t);
-	sei();
 	while (timer < end) {
 		wdt_reset();
 		process_usb();
@@ -93,7 +104,7 @@ static inline void SET_TONE(uint16_t freq) {
 		ICR1 = OCR1A / 2;
 	} else {
 		TCCR1A = 0b00000001;
-	};
+	}
 }
 
 static inline void start_output() {
@@ -106,157 +117,15 @@ static inline void stop_output() {
 	SET_TONE(0);
 }
 
-/***
- * I2C Display
- *
- */
-
-#define START 0x08
-#define ReSTART 0x10
-#define MT_SLA_ACK 0x18
-#define MT_DATA_ACK 0x28
-
-#define MR_SLA_ACK 0x40
-#define MR_DATA_ACK 0x50
-#define MR_DATA_NACK 0x58
-
-#define SLA_W 0xA0
-#define SLA_R 0xA1
-#define ADDRESS 0x00
-#define DATA 0x55
-
-void Error () {
-//	unsigned i = 0;
-//	for (i = 0; i < 3; i++) {
-//		set_bit(PINB, 0);
-//		_delay_ms(500);
-//		clear_bit(PINB, 0);
-//		_delay_ms(500);
-//	}
-//	clear_bit(PINB, 0);
-}
-
-void i2c_start () {
-	// start
-	TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
-	while (!(TWCR & (1<<TWINT)));
-	if ((TWSR & 0xF8) != START) return Error();   
-}
-
-void i2c_stop () {
-	TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
-}
-
-uint8_t i2c_write (uint8_t data) {
-	TWDR = data;
-	TWCR = (1<<TWINT) | (1<<TWEN);
-	while (!(TWCR & (1<<TWINT)));
-
-	switch (TWSR & 0xF8) {
-		case MT_SLA_ACK:
-		case MR_SLA_ACK:
-		case MT_DATA_ACK:
-			return 1;
-		default:
-			Error();
-			return 0;
-	}
-}
-
-void display_write_instruction (uint8_t address, uint8_t data) {
-	i2c_start();
-	i2c_write(address);
-	i2c_write(0b10000000);
-	i2c_write(data);
-	i2c_stop();
-	_delay_ms(1);
-}
-
-void display_write_data (char* string) {
-	uint16_t i = 0;
-	uint16_t len = strlen(string);
-
-	display_write_instruction(0x7c, 0b00000001);
-
-	i2c_start();
-	i2c_write(0x7c);
-	i2c_write(0b01000000); // Co=0 RS=1
-
-	for (i = 0; i < len && i < 8; i++) {
-		i2c_write(string[i]);
-	}
-	i2c_stop();
-
-	_delay_ms(1);
-
-	i2c_start();
-	i2c_write(0x7c);
-	i2c_write(0b10000000); // Co=1 RS=0
-	i2c_write(0b11000000); // set ddram address to line 2
-	i2c_write(0b01000000); // Co=0 RS=1
-	for (; i < len && i < 16; i++) {
-		i2c_write(string[i]);
-	}
-	i2c_stop();
-}
-
-void display_init () {
-	TWBR = 0x24;
-	TWSR = 0b00000001;
-	TWCR = 1<<TWEN;
-
-	display_write_instruction(0x7c, 0b00111000); // function set to 0 (default)
-	display_write_instruction(0x7c, 0b00111001); // function set to 1 (extended)
-	display_write_instruction(0x7c, 0b00010100); // internal osc frequency
-	display_write_instruction(0x7c, 0b01110100); // contrast set
-	display_write_instruction(0x7c, 0b01010100); // power/icon/contrast control
-	display_write_instruction(0x7c, 0b01101100); // follower control
-	_delay_ms(300);
-	display_write_instruction(0x7c, 0b00111000); // function set to 0
-	display_write_instruction(0x7c, 0b00001101); // display on/off control
-	display_write_instruction(0x7c, 0b00000001); // clear all
-
-	_delay_ms(10);
-}
-
-
-void update_display () {
-	uint8_t index;
-	uint8_t i;
-	char buf[16];
-	memset(buf, 0, sizeof(buf));
-
-	index = send_buffer.read_index;
-	for (i = 0; (i < send_buffer.size) && (i < 16); i++) {
-		buf[i] = send_buffer.data[(char)index+i];
-	}
-
-	display_write_data(buf);
-}
-
-
 /****
  * USB Control
  */
 
-PROGMEM const char usbHidReportDescriptor[22] = {	 /* USB report descriptor */
-	0x06, 0x00, 0xff, // USAGE_PAGE (Generic Desktop)
-	0x09, 0x01,       // USAGE (Vendor Usage 1)
-	0xa1, 0x01,       // COLLECTION (Application)
-	0x15, 0x00,       //   LOGICAL_MINIMUM (0)
-	0x26, 0xff, 0x00, //   LOGICAL_MAXIMUM (255)
-	0x75, 0x08,       //   REPORT_SIZE (8)
-
-	0x95, 0xff,       //   REPORT_COUNT (255)
-	0x09, 0x00,       //   USAGE (Undefined)
-	0xb2, 0x02, 0x01, //   FEATURE (Data,Var,Abs,Buf)
-
-	0xc0              // END_COLLECTION
-};
-
 uint8_t usbFunctionRead (uint8_t* data, uint8_t len) {
-	data[0] = send_buffer.size;
+	data[0] = recv_buffer.size;
 	data[1] = speed;
+
+	// return actually sending data length
 	return len;
 }
 
@@ -267,7 +136,9 @@ uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
 			i++;
 			switch (data[i]) {
 				case 'C': // clear
-					ringbuffer_init(&send_buffer);
+					recv_buffer.write_index = 0;
+					recv_buffer.read_index = 0;
+					recv_buffer.size = 0;
 					break;
 				case 'S': // speed
 					speed = data[++i];
@@ -278,30 +149,45 @@ uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
 					tone |= (data[++i]<<8);
 					break;
 				case 0x08: // BS
-					send_buffer.write_index--;
-					send_buffer.size--;
+					recv_buffer.write_index--;
+					recv_buffer.size--;
 					break;
 			}
 			continue;
 		}
-		ringbuffer_put(&send_buffer, data[i]);
+		ringbuffer_put(&recv_buffer, data[i]);
 	}
-	return 1;
+
+	if (len > bytesRemaining) bytesRemaining = len;
+	bytesRemaining -= len;
+
+	// return 1 if we have all data
+	return bytesRemaining == 0;
 }
 
 usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
-	usbRequest_t* rq = (void*)data;
+	usbRequest_t* req = (void*)data;
+	static uint8_t dataBuffer[4];
 
-	if ((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS) {
-		if (rq->bRequest == USBRQ_HID_GET_REPORT) {
-			return USB_NO_MSG;
-		} else
-		if (rq->bRequest == USBRQ_HID_SET_REPORT) {
-			return USB_NO_MSG;
+	if (req->bRequest == USB_REQ_TEST) {
+		uart_puts("USB_REQ_TEST");
+		usbMsgLen_t len = 4;
+		if (len > req->wLength.word) len = req->wLength.word; // trim to requested words
+		dataBuffer[0] = req->wValue.bytes[0];
+		dataBuffer[1] = req->wValue.bytes[1];
+		dataBuffer[2] = req->wIndex.bytes[0];
+		dataBuffer[3] = req->wIndex.bytes[1];
+		usbMsgPtr = (usbMsgPtr_t)dataBuffer;
+		return len;
+	} else
+	if (req->bRequest == USB_REQ_SEND) {
+		bytesRemaining = req->wLength.word;
+		if ((recv_buffer.capacity - recv_buffer.size) < bytesRemaining) {
+			bytesRemaining = recv_buffer.capacity - recv_buffer.size;
 		}
-	} else {
-		/* ignore vendor type requests, we don't use any */
+		return USB_NO_MSG;
 	}
+
 	return 0;
 }
 
@@ -312,7 +198,8 @@ void setup_io () {
 
 	uint8_t i;
 
-	ringbuffer_init(&send_buffer);
+	ringbuffer_init(&recv_buffer, recv_buffer_data, 128);
+	ringbuffer_init(&send_buffer, send_buffer_data, 128);
 	_delay_ms(10);
 
 	timer = 0;
@@ -331,12 +218,10 @@ void setup_io () {
 
 	/**
 	 * timer interrupt
-	 * CTC 0.1msec
-	 * F_CPU / 64 / OCR0A
 	 */
 	TCCR0A = 0b00000010;
 	TCCR0B = 0b00000011;
-	OCR0A  = 100;
+	OCR0A  = 250;
 	TIMSK0 = 0b00000010;
 	
 	/**
@@ -347,19 +232,16 @@ void setup_io () {
 	TCCR1B = 0b00010100;
 	SET_TONE(0);
 
-	wdt_enable(WDTO_1S);
-
-	uart_init(19200);
+	uart_init(9600);
 
 	// USB
-
 	uart_puts("usbInit");
 	usbInit();
 	uart_puts("usbDeviceDisconnect");
 	usbDeviceDisconnect();
 
 	i = 0;
-	while(--i){             /* fake USB disconnect for > 250 ms */
+	while (--i) {             /* fake USB disconnect for > 250 ms */
 		wdt_reset();
 		_delay_ms(1);
 	}
@@ -367,72 +249,73 @@ void setup_io () {
 	usbDeviceConnect();
 	sei();
 
-	display_init();
-	display_write_data("WAITING.");
+	wdt_enable(WDTO_120MS);
+}
+
+static inline void send_morse_code (uint32_t current_sign) {
+	int8_t i;
+	uint8_t current_bit;
+	current_bit  = 32 - NLZ(current_sign);
+
+	for (i = current_bit; i >= 0; i--) {
+		if ((current_sign >> i) & 1) {
+			start_output();
+		} else {
+			stop_output();
+		}
+		delay_ms(speed_unit);
+	}
+	stop_output();
+	delay_ms(speed_unit * 3);
 }
 
 int main (void) {
-	int i;
 	uint8_t character;
 	uint32_t current_sign;
-	uint8_t current_bit;
 
+	uint8_t mcusr = MCUSR;
+	MCUSR = 0;
+
+	sent_data_length = 0;
 	setup_io();
 
+	char buf[8];
+	uart_puts("RESETTED");
+	uart_puts(itoa(mcusr, buf, 2));
+
 	for (;;) {
-		if (send_buffer.size > 0) {
-			update_display();
-			character = ringbuffer_get(&send_buffer);
-			if (character == ' ') {
-				delay_ms(speed_unit * 7);
-			} else {
-				memcpy_PF(&current_sign, (uint_farptr_t)(uint16_t)&MORSE_CODES[character], 4);
-
-				current_bit  = 32 - NLZ(current_sign);
-
-//				char buf[100];
-//				sprintf(buf, "%c %lx %d", character, current_sign, current_bit);
-//				display_write_data(buf);
-
-				for (i = current_bit; i >= 0; i--) {
-					if ((current_sign >> i) & 1) {
-						start_output();
-					} else {
-						stop_output();
-					}
-					delay_ms(speed_unit);
-				}
-				update_display();
-				stop_output();
-				delay_ms(speed_unit * 3);
-			}
-
-			if (!send_buffer.size) {
-				uart_puts("Buffer Empty");
-				display_write_data("WAITING.");
-			}
-		} else {
-			if (dot_keying) {
-				start_output();
-				delay_ms(speed_unit);
-				stop_output();
-				delay_ms(INHIBIT_TIME(speed));
-				dot_keying = 0;
-				delay_ms(INHIBIT_AFTER(speed));
-			}
-
-			if (dash_keying) {
-				start_output();
-				delay_ms(speed_unit * 3);
-				stop_output();
-				delay_ms(INHIBIT_TIME(speed));
-				dash_keying = 0;
-				delay_ms(INHIBIT_AFTER(speed));
-			}
-		}
-
 		wdt_reset();
 		process_usb();
+
+		if (recv_buffer.size > 0) {
+			character = ringbuffer_get(&recv_buffer);
+			if (character == ' ') {
+				ringbuffer_put(&send_buffer, character);
+				delay_ms(speed_unit * 4);
+			} else {
+				memcpy_P(&current_sign, &MORSE_CODES[character], 4);
+				ringbuffer_put(&send_buffer, character);
+				send_morse_code(current_sign);
+			}
+		} else {
+//			if (dot_keying) {
+//				start_output();
+//				delay_ms(speed_unit);
+//				stop_output();
+//				delay_ms(INHIBIT_TIME(speed));
+//				dot_keying = 0;
+//				delay_ms(INHIBIT_AFTER(speed));
+//			}
+//
+//			if (dash_keying) {
+//				start_output();
+//				delay_ms(speed_unit * 3);
+//				stop_output();
+//				delay_ms(INHIBIT_TIME(speed));
+//				dash_keying = 0;
+//				delay_ms(INHIBIT_AFTER(speed));
+//			}
+		}
 	}
 
 	return 0;
