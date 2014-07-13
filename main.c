@@ -212,8 +212,10 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	} else
 	if (req->bRequest == USB_REQ_BACK) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
-			recv_buffer.write_index--;
-			recv_buffer.size--;
+			if (recv_buffer.size > 0) {
+				recv_buffer.write_index--;
+				recv_buffer.size--;
+			}
 			return 0;
 		} else {
 			return 0;

@@ -154,6 +154,9 @@ end
 
 cw.speed = 35
 cw.tone = 600
+#cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
+#cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
+#cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
 "CQ CQ DE JH1UMV JH1UMV PSE K".split(//).each do |i|
 	sleep 0.2
 	cw << i
