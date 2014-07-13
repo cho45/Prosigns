@@ -192,7 +192,7 @@ section at the end of this file).
  * Please note that Start Of Frame detection works only if D- is wired to the
  * interrupt, not D+. THIS IS DIFFERENT THAN MOST EXAMPLES!
  */
-#define USB_CFG_CHECK_DATA_TOGGLING     0
+#define USB_CFG_CHECK_DATA_TOGGLING     1
 /* define this macro to 1 if you want to filter out duplicate data packets
  * sent by the host. Duplicates occur only as a consequence of communication
  * errors, when the host does not receive an ACK. Please note that you need to

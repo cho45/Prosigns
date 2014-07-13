@@ -55,7 +55,8 @@ uint8_t getInterruptData (uint8_t** p) {
 	static uint8_t buffer[8];
 	uint8_t len;
 	*p = buffer;
-	for (len = 0; len < 8; len++) {
+	buffer[0] = recv_buffer.size;
+	for (len = 1; len < 8; len++) {
 		if (send_buffer.size) {
 			buffer[len] = ringbuffer_get(&send_buffer);
 		} else {
@@ -130,22 +131,14 @@ uint8_t usbFunctionRead (uint8_t* data, uint8_t len) {
 }
 
 uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
+	static uint8_t usbPrevDataToken;
+	// Check host resend already arrived data (host lost ACK from device)
+	// usbCurrentDataToken will be 75 or 195
+	if (usbPrevDataToken == usbCurrentDataToken) return 1;
+	usbPrevDataToken = usbCurrentDataToken;
+
 	uint8_t i;
 	for (i = 0; i < len; i++) {
-		if (data[i] == '\\') {
-			i++;
-			switch (data[i]) {
-				case 'T': // tone
-					tone  = data[++i];
-					tone |= (data[++i]<<8);
-					break;
-				case 0x08: // BS
-					recv_buffer.write_index--;
-					recv_buffer.size--;
-					break;
-			}
-			continue;
-		}
 		ringbuffer_put(&recv_buffer, data[i]);
 	}
 
@@ -209,7 +202,26 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 		} else {
 			return 0;
 		}
+	} else
+	if (req->bRequest == USB_REQ_BACK) {
+		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
+			recv_buffer.write_index--;
+			recv_buffer.size--;
+			return 0;
+		} else {
+			return 0;
+		}
+	} else
+	if (req->bRequest == USB_REQ_TONE) {
+		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
+			tone = req->wValue.word;
+			return 0;
+		} else {
+			return 0;
+		}
 	}
+	
+	
 
 	return 0;
 }

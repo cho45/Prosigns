@@ -13,6 +13,8 @@ class ContinuousWave
 	USB_REQ_SEND = 2
 	USB_REQ_SPEED = 3
 	USB_REQ_STOP = 4
+	USB_REQ_BACK = 5
+	USB_REQ_TONE = 6
 
 	class ContinuousWaveException < StandardError; end
 	class DeviceNotFound < ContinuousWaveException; end
@@ -91,6 +93,15 @@ class ContinuousWave
 		)[0]
 	end
 
+	def tone=(tone)
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+			:bRequest      => USB_REQ_TONE,
+			:wValue        => tone.to_i,
+			:wIndex        => 0x0000,
+		)[0]
+	end
+
 	def stop
 		@handle.control_transfer(
 			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
@@ -105,12 +116,14 @@ class ContinuousWave
 			loop do
 				begin
 					# max 8bytes
-					sent = @handle.interrupt_transfer(
+					status =  @handle.interrupt_transfer(
 						:endpoint => LIBUSB::ENDPOINT_IN | 1,
 						:dataIn   => 8,
 						:timeout  => 5000,
 					)
-					block.call(sent)
+					# @buffer_size = status[0]
+					sent = status[1..-1]
+					block.call(sent) unless sent.empty?
 				rescue LIBUSB::ERROR_TIMEOUT
 				end
 			end
@@ -128,22 +141,23 @@ end
 cw = ContinuousWave.new
 cw.open
 cw.listen do |sent|
+	p cw.device_buffer
 	puts sent
-	cw.stop
-	begin
-		if cw.device_buffer.empty?
-			cw.close
-		end
-	rescue Exception => e
-		p e
-	end
+#	begin
+#		if cw.device_buffer.empty?
+#			cw.close
+#		end
+#	rescue Exception => e
+#		p e
+#	end
 end
 
 cw.speed = 35
-# cw << "CQ CQ DE JH1UMV JH1UMV PSE K"
-cw << "CQ "
+cw.tone = 600
+cw << "CQ CQ DE JH1UMV JH1UMV PSE K"
 
-sleep 0.5 until cw.closed?
+#sleep 1 until cw.closed?
+sleep
 
 __END__
 
