@@ -135,15 +135,6 @@ uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
 		if (data[i] == '\\') {
 			i++;
 			switch (data[i]) {
-				case 'C': // clear
-					recv_buffer.write_index = 0;
-					recv_buffer.read_index = 0;
-					recv_buffer.size = 0;
-					break;
-				case 'S': // speed
-					speed = data[++i];
-					speed_unit = 1200 / speed;
-					break;
 				case 'T': // tone
 					tone  = data[++i];
 					tone |= (data[++i]<<8);
@@ -167,7 +158,7 @@ uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
 
 usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	usbRequest_t* req = (void*)data;
-	static uint8_t dataBuffer[4];
+	static uint8_t dataBuffer[128];
 
 	if (req->bRequest == USB_REQ_TEST) {
 		uart_puts("USB_REQ_TEST");
@@ -181,11 +172,43 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 		return len;
 	} else
 	if (req->bRequest == USB_REQ_SEND) {
-		bytesRemaining = req->wLength.word;
-		if ((recv_buffer.capacity - recv_buffer.size) < bytesRemaining) {
-			bytesRemaining = recv_buffer.capacity - recv_buffer.size;
+		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
+			bytesRemaining = req->wLength.word;
+			if ((recv_buffer.capacity - recv_buffer.size) < bytesRemaining) {
+				bytesRemaining = recv_buffer.capacity - recv_buffer.size;
+			}
+			return USB_NO_MSG;
+		} else {
+			usbMsgLen_t len = recv_buffer.size;
+			if (req->wLength.word < len) len = req->wLength.word;
+			uint8_t i;
+			for (i = 0; i < len; i++) {
+				dataBuffer[i] = ringbuffer_get_nth(&recv_buffer, i);
+			}
+			usbMsgPtr = (usbMsgPtr_t)dataBuffer;
+			return len;
 		}
-		return USB_NO_MSG;
+	} else
+	if (req->bRequest == USB_REQ_SPEED) {
+		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
+			speed = req->wValue.bytes[0];
+			speed_unit = 1200 / speed;
+			return 0; // no data block
+		} else {
+			dataBuffer[0] = speed;
+			usbMsgPtr = (usbMsgPtr_t)dataBuffer;
+			return 1;
+		}
+	} else
+	if (req->bRequest == USB_REQ_STOP) {
+		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
+			recv_buffer.write_index = 0;
+			recv_buffer.read_index = 0;
+			recv_buffer.size = 0;
+			return 0;
+		} else {
+			return 0;
+		}
 	}
 
 	return 0;

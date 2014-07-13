@@ -1,15 +1,153 @@
 #!/usr/bin/env ruby
 
-require "libusb"
+require 'eventmachine'
+require 'libusb'
+require 'libusb/eventmachine'
 
-ID_VENDOR = 0x16c0
-ID_PRODUCT = 0x05dc
 
-USB_REQ_TEST = 1
-USB_REQ_SEND = 2
+class ContinuousWave
+	ID_VENDOR = 0x16c0
+	ID_PRODUCT = 0x05dc
+
+	USB_REQ_TEST = 1
+	USB_REQ_SEND = 2
+	USB_REQ_SPEED = 3
+	USB_REQ_STOP = 4
+
+	class ContinuousWaveException < StandardError; end
+	class DeviceNotFound < ContinuousWaveException; end
+
+	def initialize
+		@usb = LIBUSB::Context.new
+		@listeners = []
+		@buffer = ""
+		@closed = false
+	end
+
+	def open
+		@device = @usb.devices(:idVendor => ID_VENDOR, :idProduct => ID_PRODUCT).select {|i|
+			i.manufacturer == 'lowreal.net'
+		}.first or raise DeviceNotFound
+		@handle = @device.open
+		@handle.claim_interface(0)
+
+		@thread = Thread.start do
+			Thread.current.abort_on_exception = true
+			loop do
+				unless @buffer.empty?
+					sent = @handle.control_transfer(
+						:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+						:bRequest      => USB_REQ_SEND,
+						:wValue        => 0x0000,
+						:wIndex        => 0x0000,
+						:dataOut       => @buffer.slice(0, 254)
+					)
+					@buffer.slice!(0, 254)
+				end
+				sleep 0.1
+			end
+		end
+	end
+
+	def close
+		@thread.kill rescue nil
+		@handle.close
+		@closed = true
+		@listeners.each do |th|
+			th.kill rescue nil
+		end
+	end
+	
+	def closed?
+		@closed
+	end
+
+	def device_buffer
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+			:bRequest      => USB_REQ_SEND,
+			:wValue        => 0x0000,
+			:wIndex        => 0x0000,
+			:dataIn        => 254,
+		)
+	end
+
+	def speed
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+			:bRequest      => USB_REQ_SPEED,
+			:wValue        => 0x0000,
+			:wIndex        => 0x0000,
+			:dataIn        => 1,
+		)[0]
+	end
+
+	def speed=(speed)
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+			:bRequest      => USB_REQ_SPEED,
+			:wValue        => speed.to_i,
+			:wIndex        => 0x0000,
+		)[0]
+	end
+
+	def stop
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+			:bRequest      => USB_REQ_STOP,
+			:wValue        => speed.to_i,
+			:wIndex        => 0x0000,
+		)[0]
+	end
+
+	def listen(&block)
+		th = Thread.start do 
+			loop do
+				begin
+					# max 8bytes
+					sent = @handle.interrupt_transfer(
+						:endpoint => LIBUSB::ENDPOINT_IN | 1,
+						:dataIn   => 8,
+						:timeout  => 5000,
+					)
+					block.call(sent)
+				rescue LIBUSB::ERROR_TIMEOUT
+				end
+			end
+		end
+		Thread.pass
+		@listeners << th
+		th
+	end
+
+	def <<(value)
+		@buffer << value
+	end
+end
+
+cw = ContinuousWave.new
+cw.open
+cw.listen do |sent|
+	puts sent
+	cw.stop
+	begin
+		if cw.device_buffer.empty?
+			cw.close
+		end
+	rescue Exception => e
+		p e
+	end
+end
+
+cw.speed = 35
+# cw << "CQ CQ DE JH1UMV JH1UMV PSE K"
+cw << "CQ "
+
+sleep 0.5 until cw.closed?
+
+__END__
 
 @usb = LIBUSB::Context.new
-@device ||= @usb.devices(:idVendor => ID_VENDOR, :idProduct => ID_PRODUCT).first or raise "Device Not Found"
 p @device
 @device.open do |handle|
 	p handle
@@ -41,8 +179,7 @@ p @device
 				p handle.interrupt_transfer(
 					:endpoint => LIBUSB::ENDPOINT_IN | 1,
 					:dataIn   => 8,
-					#:dataOut  => 'xxx',
-					:timeout  => 2000,
+					:timeout  => 5000,
 				)
 			rescue LIBUSB::ERROR_TIMEOUT
 			end
@@ -61,6 +198,14 @@ p @device
 					:wValue        => 0x0000,
 					:wIndex        => 0x0000,
 					:dataOut       => buffer.shift
+				)
+
+				p handle.control_transfer(
+					:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+					:bRequest      => USB_REQ_SEND,
+					:wValue        => 0x0000,
+					:wIndex        => 0x0000,
+					:dataIn        => 254,
 				)
 			end
 			sleep 0.1
