@@ -46,7 +46,7 @@ class ContinuousWave
 					)
 					@buffer.slice!(0, 254)
 				end
-				sleep 0.1
+				sleep 0.01
 			end
 		end
 	end
@@ -154,7 +154,10 @@ end
 
 cw.speed = 35
 cw.tone = 600
-cw << "CQ CQ DE JH1UMV JH1UMV PSE K"
+"CQ CQ DE JH1UMV JH1UMV PSE K".split(//).each do |i|
+	sleep 0.2
+	cw << i
+end
 
 #sleep 1 until cw.closed?
 sleep

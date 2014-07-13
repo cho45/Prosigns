@@ -145,8 +145,13 @@ uint8_t usbFunctionWrite (uint8_t* data, uint8_t len) {
 	if (len > bytesRemaining) bytesRemaining = len;
 	bytesRemaining -= len;
 
-	// return 1 if we have all data
-	return bytesRemaining == 0;
+	if (bytesRemaining) {
+		return 0;
+	} else {
+		usbPrevDataToken = 0;
+		// return 1 if we have all data
+		return 1;
+	}
 }
 
 usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
@@ -178,6 +183,8 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 			for (i = 0; i < len; i++) {
 				dataBuffer[i] = ringbuffer_get_nth(&recv_buffer, i);
 			}
+			// XXX: chrome.usb does not receive data less than 8 bytes
+			if (len < 8) for (len = 8; i < len; i++) dataBuffer[i] = 0;
 			usbMsgPtr = (usbMsgPtr_t)dataBuffer;
 			return len;
 		}
