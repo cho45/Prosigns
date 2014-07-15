@@ -6221,7 +6221,7 @@ Japanese symbol</description>
 </classes>
 <parts>
 <part name="IC1" library="atmel" deviceset="MEGA8-P" device="" value="ATmega168P"/>
-<part name="Q1" library="special" deviceset="XTAL/S" device="" value="16MHz"/>
+<part name="Q1" library="special" deviceset="XTAL/S" device="" value="18MHz"/>
 <part name="C1" library="c-j" deviceset="C-" device="50V-0302-2.54" value="22p"/>
 <part name="C2" library="c-j" deviceset="C-" device="50V-0302-2.54" value="22p"/>
 <part name="D1" library="diode" deviceset="BZX55" device="" value="3.6V"/>

@@ -53,6 +53,8 @@ uint8_t send_buffer_data[128];
 uint8_t sent_data[8];
 uint8_t sent_data_length;
 
+uint8_t request_save_config = 0;
+
 uint8_t getInterruptData (uint8_t** p) {
 	static uint8_t buffer[8];
 	uint8_t len;
@@ -120,6 +122,7 @@ static inline void set_speed (uint8_t wpm, uint8_t inhibit_time) {
 		// invalid
 		config.inhibit_time = 0;
 	}
+	request_save_config++;
 }
 
 static inline void start_output() {
@@ -233,6 +236,7 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	if (req->bRequest == USB_REQ_TONE) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
 			config.tone = req->wValue.word;
+			request_save_config++;
 			return 0;
 		} else {
 			return 0;
@@ -245,10 +249,13 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 }
 
 void setup_io () {
-	config.speed = 20;
-	config.speed_unit = 1200 / config.speed;
-	config.tone = 600;
-	config.inhibit_time = config.speed_unit * 0.3;
+	eeprom_busy_wait();
+	eeprom_read_block(&config, (uint8_t*)0, sizeof(config));
+
+	if (!config.speed) {
+		set_speed(20, 20);
+		config.tone = 600;
+	}
 
 	uint8_t i;
 
@@ -411,6 +418,11 @@ int main (void) {
 				send_morse_code(current_sign);
 			}
 			current_sign = 0;
+		}
+
+		if (request_save_config && eeprom_is_ready()) {
+			eeprom_update_block(&config, (uint8_t*)0, sizeof(config));
+			request_save_config = 0;
 		}
 	}
 

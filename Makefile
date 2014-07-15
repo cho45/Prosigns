@@ -18,7 +18,7 @@
 # FUSES ........ Parameters for avrdude to flash the fuses appropriately.
 
 DEVICE     = atmega168p
-CLOCK      = 16000000
+CLOCK      = 18000000
 PROGRAMMER = -c avrispmkII -P usb
 OBJECTS    = usbdrv/usbdrv.o usbdrv/usbdrvasm.o usbdrv/oddebug.o main.o
 # 16MHz Ext. Crystal Osc

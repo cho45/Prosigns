@@ -348,7 +348,7 @@ cw.listen do |sent, custom|
 #	end
 end
 
-cw.speed = 20
+cw.speed = 30
 cw.inhibit_time = 20
 p cw.speed_inhibit
 cw.tone = 600
