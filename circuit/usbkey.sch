@@ -6239,7 +6239,7 @@ Japanese symbol</description>
 <part name="P+2" library="supply1" deviceset="VCC" device=""/>
 <part name="R1" library="r-j" deviceset="R-" device="1/4W-07.62" value="68"/>
 <part name="R2" library="r-j" deviceset="R-" device="1/4W-07.62" value="68"/>
-<part name="R3" library="r-j" deviceset="R-" device="1/4W-02.54-V" value="1.5k"/>
+<part name="R3" library="r-j" deviceset="R-" device="1/4W-07.62" value="1.5k"/>
 <part name="GND3" library="supply1" deviceset="GND" device=""/>
 <part name="R6" library="r-j" deviceset="R-" device="1/4W-02.54-V" value="100"/>
 <part name="R7" library="r-j" deviceset="R-" device="1/4W-07.62" value="1k"/>

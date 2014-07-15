@@ -348,12 +348,9 @@ cw.listen do |sent, custom|
 #	end
 end
 
-cw.speed = 25
+cw.speed = 20
 cw.inhibit_time = 20
 p cw.speed_inhibit
-cw.speed = 40
-p cw.speed_inhibit
-exit
 cw.tone = 600
 cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
 #cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
