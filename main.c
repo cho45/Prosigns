@@ -25,20 +25,20 @@
 #define INPUT_DOT PD6
 #define INPUT_DASH PD7
 
-#define INHIBIT_RATE 0.3
-#define INHIBIT_TIME(speed) ((uint16_t)(1200 * INHIBIT_RATE) / speed)
-#define INHIBIT_AFTER(speed) ((uint16_t)(1200 * (1 - INHIBIT_RATE)) / speed)
-
 #define DURATION(msec) (uint16_t)(msec)
 
 
 /**
  * Global variables
  */
-volatile uint8_t speed;
-volatile uint8_t speed_unit;
+struct {
+	uint8_t speed;
+	uint8_t speed_unit;
+	uint16_t tone;
+	uint8_t inhibit_time;
+} config;
+
 volatile uint8_t dot_keying, dash_keying;
-volatile uint16_t tone;
 
 volatile uint16_t timer;
 volatile uint16_t keying_timer;
@@ -111,14 +111,20 @@ static inline void SET_TONE(uint16_t freq) {
 	}
 }
 
-static inline void set_speed (uint8_t wpm) {
-	speed = wpm;
-	speed_unit = 1200 / speed;
+static inline void set_speed (uint8_t wpm, uint8_t inhibit_time) {
+	config.speed = wpm;
+	config.speed_unit = 1200 / config.speed;
+	if (inhibit_time < config.speed_unit) {
+		config.inhibit_time = inhibit_time;
+	} else {
+		// invalid
+		config.inhibit_time = 0;
+	}
 }
 
 static inline void start_output() {
 	set_bit(PORTB, OUTPUT);
-	SET_TONE(tone);
+	SET_TONE(config.tone);
 }
 
 static inline void stop_output() {
@@ -132,7 +138,7 @@ static inline void stop_output() {
 
 uint8_t usbFunctionRead (uint8_t* data, uint8_t len) {
 	data[0] = recv_buffer.size;
-	data[1] = speed;
+	data[1] = config.speed;
 
 	// return actually sending data length
 	return len;
@@ -199,12 +205,13 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	} else
 	if (req->bRequest == USB_REQ_SPEED) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
-			set_speed(req->wValue.bytes[0]);
+			set_speed(req->wValue.bytes[0], req->wValue.bytes[1]);
 			return 0; // no data block
 		} else {
-			dataBuffer[0] = speed;
+			dataBuffer[0] = config.speed;
+			dataBuffer[1] = config.inhibit_time;
 			usbMsgPtr = (usbMsgPtr_t)dataBuffer;
-			return 1;
+			return 2;
 		}
 	} else
 	if (req->bRequest == USB_REQ_STOP) {
@@ -225,7 +232,7 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	} else
 	if (req->bRequest == USB_REQ_TONE) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
-			tone = req->wValue.word;
+			config.tone = req->wValue.word;
 			return 0;
 		} else {
 			return 0;
@@ -238,9 +245,10 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 }
 
 void setup_io () {
-	speed = 20;
-	speed_unit = 1200 / speed;
-	tone = 600;
+	config.speed = 20;
+	config.speed_unit = 1200 / config.speed;
+	config.tone = 600;
+	config.inhibit_time = config.speed_unit * 0.3;
 
 	uint8_t i;
 
@@ -309,10 +317,10 @@ static inline void send_morse_code (uint32_t current_sign) {
 		} else {
 			stop_output();
 		}
-		delay_ms(speed_unit);
+		delay_ms(config.speed_unit);
 	}
 	stop_output();
-	delay_ms(speed_unit * 3);
+	delay_ms(config.speed_unit * 3);
 }
 
 int main (void) {
@@ -342,11 +350,11 @@ int main (void) {
 			current_sign = current_sign << 2 | 0b01;
 
 			start_output();
-			delay_ms(speed_unit);
+			delay_ms(config.speed_unit);
 			stop_output();
-			delay_ms(INHIBIT_TIME(speed));
+			delay_ms(config.inhibit_time);
 			dot_keying = 0;
-			delay_ms(INHIBIT_AFTER(speed));
+			delay_ms(config.speed_unit - config.inhibit_time);
 			keying_timer = 1;
 		}
 
@@ -357,19 +365,19 @@ int main (void) {
 			current_sign = current_sign << 4 | 0b0111;
 
 			start_output();
-			delay_ms(speed_unit * 3);
+			delay_ms(config.speed_unit * 3);
 			stop_output();
-			delay_ms(INHIBIT_TIME(speed));
+			delay_ms(config.inhibit_time);
 			dash_keying = 0;
-			delay_ms(INHIBIT_AFTER(speed));
+			delay_ms(config.speed_unit - config.inhibit_time);
 			keying_timer = 1;
 		}
 
-		if (speed_unit * 6 < keying_timer && !sending) {
+		if (config.speed_unit * 6 < keying_timer && !sending) {
 			keying_timer = 0;
 			ringbuffer_put(&send_buffer, ' ');
 		} else
-		if (speed_unit * 2 < keying_timer) {
+		if (config.speed_unit * 2 < keying_timer) {
 			if (sending) {
 				ringbuffer_put(&send_buffer, 0xff);
 				// all code send as custom sequence for performance
@@ -385,7 +393,7 @@ int main (void) {
 			character = ringbuffer_get(&recv_buffer);
 			if (character == ' ') {
 				ringbuffer_put(&send_buffer, character);
-				delay_ms(speed_unit * 4);
+				delay_ms(config.speed_unit * 4);
 			} else
 			if (character == 0xff) { // custom code
 				ringbuffer_put(&send_buffer, 0xff);

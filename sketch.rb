@@ -211,21 +211,42 @@ class ContinuousWave
 		)
 	end
 
-	def speed
+	def speed_inhibit
 		@handle.control_transfer(
 			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
 			:bRequest      => USB_REQ_SPEED,
 			:wValue        => 0x0000,
 			:wIndex        => 0x0000,
-			:dataIn        => 1,
-		)[0]
+			:dataIn        => 2,
+		).unpack("C*")
+	end
+
+	def speed
+		speed_inhibit[0]
+	end
+	
+	def inhibit_time
+		speed_inhibit[1]
 	end
 
 	def speed=(speed)
+		current_speed, current_inhibit_time = *speed_inhibit
+		
 		@handle.control_transfer(
 			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
 			:bRequest      => USB_REQ_SPEED,
-			:wValue        => speed.to_i,
+			:wValue        => (speed.to_i) | (current_inhibit_time.to_i << 8),
+			:wIndex        => 0x0000,
+		)[0]
+	end
+
+	def inhibit_time=(inhibit_time)
+		current_speed, current_inhibit_time = *speed_inhibit
+		
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+			:bRequest      => USB_REQ_SPEED,
+			:wValue        => (current_speed.to_i) | (inhibit_time.to_i << 8),
 			:wIndex        => 0x0000,
 		)[0]
 	end
@@ -327,7 +348,12 @@ cw.listen do |sent, custom|
 #	end
 end
 
-cw.speed = 20
+cw.speed = 25
+cw.inhibit_time = 20
+p cw.speed_inhibit
+cw.speed = 40
+p cw.speed_inhibit
+exit
 cw.tone = 600
 cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
 #cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
