@@ -41,6 +41,8 @@ volatile uint8_t dot_keying, dash_keying;
 volatile uint16_t tone;
 
 volatile uint16_t timer;
+volatile uint16_t keying_timer;
+
 ringbuffer recv_buffer;
 uint8_t recv_buffer_data[128];
 uint8_t bytesRemaining;
@@ -77,7 +79,8 @@ static inline void process_usb () {
 }
 
 ISR(TIMER0_COMPA_vect) {
-	timer += 1;
+	timer++;
+	if (keying_timer) keying_timer++;
 
 	if (bit_is_clear(PIND, INPUT_DOT)) {
 		dot_keying = 1;
@@ -106,6 +109,11 @@ static inline void SET_TONE(uint16_t freq) {
 	} else {
 		TCCR1A = 0b00000001;
 	}
+}
+
+static inline void set_speed (uint8_t wpm) {
+	speed = wpm;
+	speed_unit = 1200 / speed;
 }
 
 static inline void start_output() {
@@ -191,8 +199,7 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	} else
 	if (req->bRequest == USB_REQ_SPEED) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
-			speed = req->wValue.bytes[0];
-			speed_unit = 1200 / speed;
+			set_speed(req->wValue.bytes[0]);
 			return 0; // no data block
 		} else {
 			dataBuffer[0] = speed;
@@ -202,9 +209,7 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	} else
 	if (req->bRequest == USB_REQ_STOP) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
-			recv_buffer.write_index = 0;
-			recv_buffer.read_index = 0;
-			recv_buffer.size = 0;
+			ringbuffer_clear(&recv_buffer);
 			return 0;
 		} else {
 			return 0;
@@ -212,10 +217,7 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 	} else
 	if (req->bRequest == USB_REQ_BACK) {
 		if ( (req->bmRequestType & USBRQ_DIR_MASK) == USBRQ_DIR_HOST_TO_DEVICE ) {
-			if (recv_buffer.size > 0) {
-				recv_buffer.write_index--;
-				recv_buffer.size--;
-			}
+			ringbuffer_pop(&recv_buffer);
 			return 0;
 		} else {
 			return 0;
@@ -314,8 +316,9 @@ static inline void send_morse_code (uint32_t current_sign) {
 }
 
 int main (void) {
+	uint8_t i;
 	uint8_t character;
-	uint32_t current_sign;
+	uint32_t current_sign = 0;
 
 	uint8_t mcusr = MCUSR;
 	MCUSR = 0;
@@ -327,38 +330,79 @@ int main (void) {
 	uart_puts("RESETTED");
 	uart_puts(itoa(mcusr, buf, 2));
 
+	uint8_t sending = 0;
 	for (;;) {
 		wdt_reset();
 		process_usb();
+
+		if (dot_keying) {
+			ringbuffer_clear(&recv_buffer);
+
+			sending = 1;
+			current_sign = current_sign << 2 | 0b01;
+
+			start_output();
+			delay_ms(speed_unit);
+			stop_output();
+			delay_ms(INHIBIT_TIME(speed));
+			dot_keying = 0;
+			delay_ms(INHIBIT_AFTER(speed));
+			keying_timer = 1;
+		}
+
+		if (dash_keying) {
+			ringbuffer_clear(&recv_buffer);
+
+			sending = 1;
+			current_sign = current_sign << 4 | 0b0111;
+
+			start_output();
+			delay_ms(speed_unit * 3);
+			stop_output();
+			delay_ms(INHIBIT_TIME(speed));
+			dash_keying = 0;
+			delay_ms(INHIBIT_AFTER(speed));
+			keying_timer = 1;
+		}
+
+		if (speed_unit * 6 < keying_timer && !sending) {
+			keying_timer = 0;
+			ringbuffer_put(&send_buffer, ' ');
+		} else
+		if (speed_unit * 2 < keying_timer) {
+			if (sending) {
+				ringbuffer_put(&send_buffer, 0xff);
+				// all code send as custom sequence for performance
+				for (i = 4; i; i--) {
+					ringbuffer_put(&send_buffer, (current_sign >> ( (i-1) * 8)) & 0xff);
+				}
+				sending = 0;
+				current_sign = 0;
+			}
+		}
 
 		if (recv_buffer.size > 0) {
 			character = ringbuffer_get(&recv_buffer);
 			if (character == ' ') {
 				ringbuffer_put(&send_buffer, character);
 				delay_ms(speed_unit * 4);
+			} else
+			if (character == 0xff) { // custom code
+				ringbuffer_put(&send_buffer, 0xff);
+				current_sign = 0;
+				while (recv_buffer.size < 4) delay_ms(10);
+				for (i = 0; i < 4; i++) {
+					character = ringbuffer_get(&recv_buffer);
+					ringbuffer_put(&send_buffer, character);
+					current_sign |= character << (i * 8);
+				}
+				send_morse_code(current_sign);
 			} else {
 				memcpy_P(&current_sign, &MORSE_CODES[character], 4);
 				ringbuffer_put(&send_buffer, character);
 				send_morse_code(current_sign);
 			}
-		} else {
-//			if (dot_keying) {
-//				start_output();
-//				delay_ms(speed_unit);
-//				stop_output();
-//				delay_ms(INHIBIT_TIME(speed));
-//				dot_keying = 0;
-//				delay_ms(INHIBIT_AFTER(speed));
-//			}
-//
-//			if (dash_keying) {
-//				start_output();
-//				delay_ms(speed_unit * 3);
-//				stop_output();
-//				delay_ms(INHIBIT_TIME(speed));
-//				dash_keying = 0;
-//				delay_ms(INHIBIT_AFTER(speed));
-//			}
+			current_sign = 0;
 		}
 	}
 

@@ -35,6 +35,19 @@ void ringbuffer_put(ringbuffer* buffer, uint8_t data) {
 	}
 }
 
+void ringbuffer_clear(ringbuffer* buffer) {
+	buffer->write_index = 0;
+	buffer->read_index = 0;
+	buffer->size = 0;
+}
+
+void ringbuffer_pop(ringbuffer* buffer) {
+	if (buffer->size > 0) {
+		buffer->write_index--;
+		buffer->size--;
+	}
+}
+
 void ringbuffer_init(ringbuffer* buffer, uint8_t* data, uint8_t size) {
 	buffer->write_index = 0;
 	buffer->read_index = 0;

@@ -16,6 +16,8 @@ class ContinuousWave
 	USB_REQ_BACK = 5
 	USB_REQ_TONE = 6
 
+	LEADING_CUSTOM_CODE = 0xff.chr
+
 	class ContinuousWaveException < StandardError; end
 	class DeviceNotFound < ContinuousWaveException; end
 
@@ -113,6 +115,9 @@ class ContinuousWave
 
 	def listen(&block)
 		th = Thread.start do 
+			Thread.abort_on_exception = true
+			buffer = "".encode('BINARY')
+			state = :init
 			loop do
 				begin
 					# max 8bytes
@@ -121,9 +126,26 @@ class ContinuousWave
 						:dataIn   => 8,
 						:timeout  => 5000,
 					)
-					# @buffer_size = status[0]
+					@buffer_size = status[0]
 					sent = status[1..-1]
-					block.call(sent) unless sent.empty?
+					sent.each_char do |char|
+						# p [state, char]
+						case state
+						when :init
+							if char == LEADING_CUSTOM_CODE
+								state = :custom
+							else
+								block.call(char, false)
+							end
+						when :custom
+							buffer << char
+							if buffer.size >= 4
+								state = :init
+								block.call(buffer, true)
+								buffer.clear
+							end
+						end
+					end
 				rescue LIBUSB::ERROR_TIMEOUT
 				end
 			end
@@ -138,11 +160,24 @@ class ContinuousWave
 	end
 end
 
+#current_sign = 0b111010111
+#3.downto(0) do |i|
+#	p "%08b" % (current_sign >> (i * 8) & 0xff)
+#end
+#__END__
+
 cw = ContinuousWave.new
 cw.open
-cw.listen do |sent|
-	p cw.device_buffer
-	puts sent
+buffer = ""
+cw.listen do |sent, custom|
+	if custom
+		p sent.unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, '')
+	else
+		p sent
+	end
+#	sent.each_byte do |byte|
+#		print "%08b" % byte
+#	end
 #	begin
 #		if cw.device_buffer.empty?
 #			cw.close
@@ -152,15 +187,15 @@ cw.listen do |sent|
 #	end
 end
 
-cw.speed = 35
+cw.speed = 20
 cw.tone = 600
+cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
 #cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
 #cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
-#cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
-"CQ CQ DE JH1UMV JH1UMV PSE K".split(//).each do |i|
-	sleep 0.2
-	cw << i
-end
+#"CQ CQ DE JH1UMV JH1UMV PSE K".split(//).each do |i|
+#	sleep 0.2
+#	cw << i
+#end
 
 #sleep 1 until cw.closed?
 sleep
