@@ -1,7 +1,7 @@
-"Prosigns" USB CW Interface by AVR V-SUB
-========================================
+"Prosigns" USB CW Interface
+===========================
 
-"Prosigns" is a USB CW (Morse) Interface for ham radio with following features:
+"Prosigns" is a USB CW (Morse) interface written with AVR V-SUB for ham radio with following features:
 
  * Automatic keying from host computer
  * Manual keying by paddles with elekey
