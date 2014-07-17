@@ -6216,7 +6216,7 @@ Japanese symbol</description>
 <variantdefs>
 </variantdefs>
 <classes>
-<class number="0" name="default" width="0.8128" drill="0">
+<class number="0" name="default" width="0" drill="0">
 </class>
 </classes>
 <parts>
@@ -6236,11 +6236,11 @@ Japanese symbol</description>
 <part name="P+1" library="supply1" deviceset="VCC" device=""/>
 <part name="GND2" library="supply1" deviceset="GND" device=""/>
 <part name="P+2" library="supply1" deviceset="VCC" device=""/>
-<part name="R1" library="r-j" deviceset="R-" device="1/4W-07.62" value="68"/>
-<part name="R2" library="r-j" deviceset="R-" device="1/4W-07.62" value="68"/>
+<part name="R1" library="r-j" deviceset="R-" device="1/4W-02.54-V" value="68"/>
+<part name="R2" library="r-j" deviceset="R-" device="1/4W-02.54-V" value="68"/>
 <part name="R3" library="r-j" deviceset="R-" device="1/4W-07.62" value="1.5k"/>
 <part name="GND3" library="supply1" deviceset="GND" device=""/>
-<part name="R6" library="r-j" deviceset="R-" device="1/4W-02.54-V" value="100"/>
+<part name="R6" library="r-j" deviceset="R-" device="1/4W-07.62" value="100"/>
 <part name="R7" library="r-j" deviceset="R-" device="1/4W-07.62" value="1k"/>
 <part name="GND4" library="supply1" deviceset="GND" device=""/>
 <part name="P3" library="pinhead" deviceset="PINHD-1X2" device="" value="OUTPUT"/>
@@ -6252,8 +6252,6 @@ Japanese symbol</description>
 <part name="P+5" library="supply1" deviceset="VCC" device=""/>
 <part name="D3" library="diode" deviceset="BZX55" device="" value="5V"/>
 <part name="D4" library="diode" deviceset="BZX55" device="" value="5V"/>
-<part name="C4" library="c-j" deviceset="C-" device="50V-0302-2.54" value="0.1u"/>
-<part name="GND8" library="supply1" deviceset="GND" device=""/>
 <part name="R4" library="r-j" deviceset="R-" device="1/4W-02.54-V" value="1.5k"/>
 <part name="P+6" library="supply1" deviceset="VCC" device=""/>
 <part name="C5" library="c-j" deviceset="C-" device="50V-0302-2.54" value="100p"/>
@@ -6340,8 +6338,6 @@ Japanese symbol</description>
 <attribute name="NAME" x="15.875" y="-32.258" size="1.778" layer="95" rot="R90"/>
 <attribute name="VALUE" x="15.875" y="-28.448" size="1.778" layer="96" rot="R90"/>
 </instance>
-<instance part="C4" gate="C" x="27.94" y="99.06" rot="R90"/>
-<instance part="GND8" gate="1" x="20.32" y="96.52"/>
 <instance part="R4" gate="R" x="33.02" y="104.14" smashed="yes" rot="R90">
 <attribute name="NAME" x="37.846" y="106.7054" size="1.778" layer="95" rot="R180"/>
 <attribute name="VALUE" x="43.18" y="106.68" size="1.778" layer="96" rot="R180"/>
@@ -6432,11 +6428,6 @@ Japanese symbol</description>
 <pinref part="GND5" gate="1" pin="GND"/>
 <wire x1="137.16" y1="7.62" x2="132.08" y2="7.62" width="0.1524" layer="91"/>
 <wire x1="132.08" y1="7.62" x2="132.08" y2="0" width="0.1524" layer="91"/>
-</segment>
-<segment>
-<pinref part="C4" gate="C" pin="1"/>
-<pinref part="GND8" gate="1" pin="GND"/>
-<wire x1="22.86" y1="99.06" x2="20.32" y2="99.06" width="0.1524" layer="91"/>
 </segment>
 <segment>
 <pinref part="C5" gate="C" pin="2"/>
@@ -6595,7 +6586,6 @@ Japanese symbol</description>
 <segment>
 <pinref part="IC1" gate="G$1" pin="PC6(/RESET)"/>
 <wire x1="33.02" y1="99.06" x2="33.02" y2="88.9" width="0.1524" layer="91"/>
-<pinref part="C4" gate="C" pin="2"/>
 <junction x="33.02" y="99.06"/>
 <pinref part="R4" gate="R" pin="1"/>
 <wire x1="33.02" y1="99.06" x2="99.06" y2="99.06" width="0.1524" layer="91"/>
@@ -6646,14 +6636,14 @@ Japanese symbol</description>
 <pinref part="R6" gate="R" pin="2"/>
 </segment>
 </net>
-<net name="N$18" class="0">
+<net name="OUT+" class="0">
 <segment>
 <pinref part="OK1" gate="G$1" pin="COL"/>
 <pinref part="P3" gate="G$1" pin="1"/>
 <wire x1="185.42" y1="10.16" x2="195.58" y2="10.16" width="0.1524" layer="91"/>
 </segment>
 </net>
-<net name="N$19" class="0">
+<net name="OUT-" class="0">
 <segment>
 <pinref part="P3" gate="G$1" pin="2"/>
 <pinref part="OK1" gate="G$1" pin="EMIT"/>
