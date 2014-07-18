@@ -158,17 +158,66 @@ class ContinuousWave
 
 	def initialize
 		@usb = LIBUSB::Context.new
-		@listeners = []
 		@buffer = ""
 		@closed = false
+		@listeners = {}
+		begin
+			find_device
+			open
+			listen
+		rescue DeviceNotFound
+		end
+		@hotplug = @usb.on_hotplug_event do |device, event|
+			case event
+			when :HOTPLUG_EVENT_DEVICE_ARRIVED
+				unless @device
+					if device.manufacturer == 'lowreal.net' && device.product == 'CW'
+						@device = device
+						open
+						listen
+						dispatch(:opened)
+					end
+				end
+			when :HOTPLUG_EVENT_DEVICE_LEFT
+				if @device
+					if @device.device_address == device.device_address
+						close
+						dispatch(:closed)
+					end
+				end
+			end
+			:repeat
+		end
+	end
+
+	def on(event, &block)
+		(@listeners[event] ||= []) << block
+	end
+
+	def dispatch(event, value=nil)
+		(@listeners[event] ||= []).each do |block|
+			block.call(value)
+		end
+	end
+
+	def join
+		loop do
+			@usb.handle_events
+			sleep 1
+		end
+	end
+
+	def find_device
+		@device = @usb.devices(:idVendor => ID_VENDOR, :idProduct => ID_PRODUCT).select {|i|
+			i.manufacturer == 'lowreal.net' && i.product == 'CW'
+		}.first or raise DeviceNotFound
+		self
 	end
 
 	def open
-		@device = @usb.devices(:idVendor => ID_VENDOR, :idProduct => ID_PRODUCT).select {|i|
-			i.manufacturer == 'lowreal.net'
-		}.first or raise DeviceNotFound
 		@handle = @device.open
 		@handle.claim_interface(0)
+		@closed = false
 
 		@thread = Thread.start do
 			Thread.current.abort_on_exception = true
@@ -189,12 +238,11 @@ class ContinuousWave
 	end
 
 	def close
+		@device = nil
 		@thread.kill rescue nil
 		@handle.close
 		@closed = true
-		@listeners.each do |th|
-			th.kill rescue nil
-		end
+		@listen.kill if @listen
 	end
 	
 	def closed?
@@ -260,16 +308,25 @@ class ContinuousWave
 		)[0]
 	end
 
-	def stop
+	def back
 		@handle.control_transfer(
 			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-			:bRequest      => USB_REQ_STOP,
-			:wValue        => speed.to_i,
+			:bRequest      => USB_REQ_BACK,
+			:wValue        => 0x0000,
 			:wIndex        => 0x0000,
 		)[0]
 	end
 
-	def listen(&block)
+	def stop
+		@handle.control_transfer(
+			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+			:bRequest      => USB_REQ_STOP,
+			:wValue        => 0x0000,
+			:wIndex        => 0x0000,
+		)[0]
+	end
+
+	def listen
 		th = Thread.start do 
 			Thread.abort_on_exception = true
 			buffer = "".encode('BINARY')
@@ -291,7 +348,10 @@ class ContinuousWave
 							if char == LEADING_CUSTOM_CODE
 								state = :custom
 							else
-								block.call(char, false)
+								dispatch(:sent, {
+									:char => char,
+									:custom => false,
+								})
 							end
 						when :custom
 							buffer << char
@@ -299,9 +359,15 @@ class ContinuousWave
 								state = :init
 								char = MORSE_CODES_MAP[buffer.unpack('N')[0]]
 								if !char || char == "\0"
-									block.call(buffer, true)
+									dispatch(:sent, {
+										:char => buffer,
+										:custom => false,
+									})
 								else
-									block.call(char, false)
+									dispatch(:sent, {
+										:char => char,
+										:custom => false,
+									})
 								end
 								buffer.clear
 							end
@@ -312,8 +378,8 @@ class ContinuousWave
 			end
 		end
 		Thread.pass
-		@listeners << th
-		th
+		@listen = th
+		true
 	end
 
 	def <<(value)
@@ -321,44 +387,318 @@ class ContinuousWave
 	end
 end
 
-#current_sign = 0b111010111
-#3.downto(0) do |i|
-#	p "%08b" % (current_sign >> (i * 8) & 0xff)
-#end
-#__END__
+require "curses"
+class Screen
+	attr_accessor :mode_string
+	attr_reader :main
 
-cw = ContinuousWave.new
-cw.open
-buffer = ""
-cw.listen do |sent, custom|
-	if custom
-		p sent.unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, '')
-	else
-		p sent
+	def initialize
+		@listeners = {}
+		@next_tick = []
 	end
-#	sent.each_byte do |byte|
-#		print "%08b" % byte
-#	end
-#	begin
-#		if cw.device_buffer.empty?
-#			cw.close
-#		end
-#	rescue Exception => e
-#		p e
-#	end
+
+	def on(event, &block)
+		(@listeners[event] ||= []) << block
+	end
+
+	def dispatch(event, value=nil)
+		(@listeners[event] ||= []).each do |block|
+			block.call(value)
+		end
+	end
+
+	def run
+		Curses.init_screen
+		begin
+			Curses.noecho
+			Curses.curs_set(0)
+
+			main_width = Curses.cols / 2
+			@main = Curses::Window.new(Curses.lines - 2, main_width - 1, 0, 0)
+			@main.idlok(true)
+			@main.scrollok(true)
+			@split = Curses::Window.new(Curses.lines - 2, 1, 0, main_width)
+			@split.attron(Curses::A_REVERSE)
+			@split.setpos(0, 0)
+			@split.addstr("|" * Curses.lines)
+			@log  = Curses::Window.new(Curses.lines - 2, Curses.cols - main_width - 2, 0, main_width + 2)
+			@log.idlok(true)
+			@log.scrollok(true)
+			@mode   = Curses::Window.new(1, Curses.cols, Curses.lines - 2, 0)
+			@status = Curses::Window.new(1, Curses.cols, Curses.lines - 1, 0)
+			@mode.attron(Curses::A_REVERSE)
+
+			@mode_string = ""
+			@update_mode = true
+
+			dispatch(:init)
+
+			while chr = Curses.getch
+				dispatch(:getch, chr)
+				
+				@split.refresh
+				while block = @next_tick.shift
+					block.call
+				end
+				if chr == ":"
+					mode = :command
+					@status.setpos(0, 0)
+					@status.addstr(":" + " " * (Curses.cols - 1))
+					@status.setpos(0, 1)
+					@status.refresh
+					command = ""
+					while chr = Curses.getch
+						case chr
+						when 10
+							@main.setpos(@main.cury, @main.curx)
+							@status.clear
+							@status.refresh
+							@main.refresh
+							do_command(command)
+							break
+						when 127
+							unless command.empty?
+								@status.setpos(@status.cury, @status.curx-1)
+								@status.delch
+								command.slice!(-1)
+								@status.refresh
+							end
+						when 27
+							@main.setpos(@main.cury, @main.curx)
+							@status.clear
+							@status.refresh
+							@main.refresh
+							break
+						else
+							command << chr
+							@status.addch(chr)
+							@status.refresh
+						end
+					end
+				else
+					dispatch(:chr, chr)
+				end
+				update_mode
+			end
+		ensure
+			Curses.close_screen
+		end
+	end
+
+	def log(str)
+		@log.addstr(str + "\n")
+		@log.refresh
+	end
+
+	def p(obj)
+		log(obj.inspect)
+	end
+
+	def update_mode
+		if @update_mode
+			@update_mode = false
+			@mode.clear
+			@mode.setpos(0, 0)
+			@mode.addstr(@mode_string + " " * (Curses.cols - @mode_string.size))
+			@mode.refresh
+		end
+	end
+
+	def update_mode!
+		@update_mode = true
+		update_mode
+	end
+
+	def echo(str, persist=false)
+		@status.setpos(0, 0)
+		@status.addstr(str + " " * (Curses.cols - str.size))
+		@status.refresh
+		@next_tick << proc {
+			echo("", true)
+		} unless persist
+	end
+
+	def do_command(command)
+		echo command
+		dispatch(:command, command)
+	end
 end
+
+class CUI
+	def initialize
+		@screen = Screen.new
+		@cw = ContinuousWave.new
+		@buffer = []
+		@queue  = []
+
+		@cw.on :opened do
+			p @cw.speed_inhibit
+			@cw.speed = 20
+			@cw.inhibit_time = 20
+			@cw.tone = 600
+			p :opened
+		end
+
+		@cw.on :closed do
+			p :closed
+		end
+
+		@cw.on :sent do |e|
+			p [:sent, e]
+			if e[:custom]
+				@buffer << "<#{e[:char].unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, '')}>"
+			else
+				@buffer << e[:char]
+			end
+			@buffer = @buffer.last(20)
+			update_screen
+		end
+
+		@screen.on :command do |command|
+			p [:on_command, command]
+			case command
+			when /^speed (\d+)/
+				@cw.speed = Regexp.last_match[1].to_i
+			when /^inhibit (\d+)/
+				@cw.inhibit_time = Regexp.last_match[1].to_i
+			when /^tone (\d+)/
+				@cw.tone = Regexp.last_match[1].to_i
+			end
+		end
+
+		@screen.on :chr do |chr|
+			case chr
+			when String
+				chr = chr.upcase
+				@queue << chr
+				@cw << chr
+				@queue.clear
+			when 27
+				@cw.stop
+				update_screen
+			when 127
+				@cw.back
+				update_screen
+			else
+				p chr
+			end
+		end
+	end
+
+	def run
+		Thread.start do
+			@cw.join
+		end
+
+		Thread.start do
+			loop do
+				speed, inhibit_time = *@cw.speed_inhibit
+				@screen.mode_string = "#{@cw.closed?? "Disconnected" : "Connected"} speed: #{speed}wpm / inhibit: #{inhibit_time}msec"
+				@screen.update_mode!
+				sleep 1
+			end
+		end
+
+		@screen.run
+	end
+
+	def p(obj)
+		@screen.p obj
+	end
+
+	def update_screen
+		@screen.main.clear
+		@screen.main.setpos(0, 0)
+		@screen.main.addstr("SENT  : #{@buffer.join.gsub("\0", "")}\n")
+		@screen.main.addstr("BUFFER: #{@cw.device_buffer.gsub("\0", "")}\n")
+		@screen.main.addstr("QUEUE : #{@queue.join.gsub("\0", "")}\n")
+		@screen.main.refresh
+	end
+end
+
+CUI.new.run
+
+__END__
+cw.find_device.open
+cw.speed = 20
+cw.inhibit_time = 20
+p cw.speed_inhibit
+cw.tone = 600
+
+__END__
+begin
+	Curses.init_screen
+	Curses.noecho
+	Curses.cbreak
+	Curses.curs_set(0)
+
+	main = Curses::Window.new(3, Curses.cols - 1, 1, 1)
+	buffer = []
+	queue  = ""
+
+	update_screen = lambda {
+		mutex.synchronize do
+			main.setpos(0, 0)
+			main.addstr(" " * Curses.cols)
+			main.setpos(0, 0)
+			main.addstr("SENT  : #{buffer.join.gsub("\0", "")}")
+			main.setpos(1, 0)
+			main.addstr(" " * Curses.cols)
+			main.setpos(1, 0)
+			main.addstr("BUFFER: #{cw.device_buffer.gsub(/\0/, '')}")
+			main.setpos(2, 0)
+			main.addstr(" " * Curses.cols)
+			main.setpos(2, 0)
+			main.addstr("QUEUE : #{queue}")
+			main.refresh
+		end
+	}
+
+	cw.listen do |sent, custom|
+		if custom
+			buffer << "<#{sent.unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, '')}>"
+		else
+			buffer << sent
+		end
+		buffer = buffer.last(20)
+		update_screen.call
+	end
+
+	update_screen.call
+
+	while chr = Curses.getch
+		case chr
+		when 27
+			cw.stop
+			update_screen.call
+		when 127
+			cw.back
+			update_screen.call
+		when Integer
+		else
+			queue << chr.upcase
+			update_screen.call
+			cw << chr.upcase
+			queue.clear
+		end
+	end
+ensure
+	Curses.close_screen
+end
+
+__END__
 
 cw.speed = 30
 cw.inhibit_time = 20
 p cw.speed_inhibit
 cw.tone = 600
 cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
-#cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
-#cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
-#"CQ CQ DE JH1UMV JH1UMV PSE K".split(//).each do |i|
-#	sleep 0.2
-#	cw << i
-#end
+cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
+cw << "CQ CQ DE JH1UMV JH1UMV PSE K "
+"CQ CQ DE JH1UMV JH1UMV PSE K".split(//).each do |i|
+	sleep 0.2
+	cw << i
+end
 
 #sleep 1 until cw.closed?
 sleep
