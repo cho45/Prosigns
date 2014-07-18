@@ -271,7 +271,7 @@ void setup_io () {
 	eeprom_busy_wait();
 	eeprom_read_block(&config, (uint8_t*)0, sizeof(config));
 
-	if (!config.speed) {
+	if (!config.speed || config.speed == 0xff) {
 		set_speed(20, 20);
 		config.tone = 600;
 	}

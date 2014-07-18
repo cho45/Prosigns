@@ -21,8 +21,8 @@ DEVICE     = atmega168p
 CLOCK      = 18000000
 PROGRAMMER = -c avrispmkII -P usb
 OBJECTS    = usbdrv/usbdrv.o usbdrv/usbdrvasm.o usbdrv/oddebug.o main.o
-# 16MHz Ext. Crystal Osc
-FUSES      = -U lfuse:w:0xdf:m -U hfuse:w:0xde:m -U efuse:w:0xf9:m
+# Use http://www.engbedded.com/fusecalc
+FUSES      = -U lfuse:w:0xff:m -U hfuse:w:0xdc:m -U efuse:w:0xf9:m
 
 
 
