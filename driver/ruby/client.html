@@ -32,37 +32,54 @@
 		<script>
 			var service = {};
 			service.request_id = 0;
-			service.socket = new WebSocket("ws://localhost:51234");
 
-			service.socket.onopen = function () {
-				console.log('onopen');
-			};
+			service.connect = function () {
+				service.socket = new WebSocket("ws://localhost:51234");
 
-			service.socket.onclose = function () {
-				console.log('onclose');
-				delete service.socket;
-				setTimeout(function () {
-					console.log('reconnecting');
-					service.connect();
-				}, 1000);
-			};
+				service.socket.onopen = function () {
+					console.log('onopen');
+				};
 
-			service.socket.onmessage = function (e) {
-				var data = JSON.parse(e.data);
-				console.log('ws.onmessage', data);
-				if (!data.id) {
-					console.log(data.result.event, data.result.value);
-				} else {
-				}
+				service.socket.onclose = function () {
+					console.log('onclose');
+					delete service.socket;
+					setTimeout(function () {
+						console.log('reconnecting');
+						service.connect();
+					}, 1000);
+				};
+
+				service.socket.onmessage = function (e) {
+					var data = JSON.parse(e.data);
+					console.log('ws.onmessage', data);
+					if (typeof data.id == 'number') {
+						if (service.command.callbacks[data.id]) {
+							service.command.callbacks[data.id](data);
+						} else {
+							console.log('unknown id');
+						}
+					} else {
+						console.log(data.result.event, data.result.value);
+					}
+				};
+
 			};
 
 			service.command = function (method, params) {
+				var id = service.request_id++;
+				service.command.callbacks[id] = function (data) {
+					delete service.command.callbacks[id];
+					console.log(data.result);
+				};
 				service.socket.send(JSON.stringify({
 					method : method,
 					params : params,
-					id     : service.request_id++
+					id     : id
 				}));
 			};
+			service.command.callbacks = {};
+
+			service.connect();
 		</script>
 	</body>
 </html>

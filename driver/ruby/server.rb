@@ -28,10 +28,21 @@ EM::run do
 	end
 
 	@cw.on :sent do |e|
-		@channel.push JSON.generate({ "id" => nil, "result" => {
-			:event => :sent,
-			:value => e,
-		} })
+		if e[:custom]
+			@channel.push JSON.generate({ "id" => nil, "result" => {
+				:event => :sent,
+				:value => {
+					:sign => e[:char].unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, '')
+				},
+			} })
+		else
+			@channel.push JSON.generate({ "id" => nil, "result" => {
+				:event => :sent,
+				:value => {
+					:char => e[:char]
+				},
+			} })
+		end
 	end
 
 	EM::WebSocket.start(:host => "0.0.0.0", :port => PORT) do |ws|
@@ -39,7 +50,7 @@ EM::run do
 			@logger.info "WebSocket onopen #{ws}"
 			ws.send(JSON.generate({ "id" => nil, "result" => {
 				:event => :opened,
-			} })) unless @cw.closed?
+			} })) if @cw.opened?
 
 			sid = @channel.subscribe do |mes|
 				ws.send(mes)
@@ -61,6 +72,10 @@ EM::run do
 
 			ret = nil, error = nil
 			begin
+				if @cw.closed?
+					raise "device is not opened"
+				end
+
 				case method
 				when "speed"
 					params = [ :speed ].map {|i| params[i.to_s] } if params.is_a? Hash
@@ -81,6 +96,8 @@ EM::run do
 					@cw.back
 					ret = true
 				end
+			rescue RuntimeError => e
+				error = e
 			rescue NameError => e
 				error = e
 			rescue Timeout::Error => e
@@ -98,6 +115,18 @@ EM::run do
 		end
 	end
 
+	timer = EventMachine::PeriodicTimer.new(1) do
+		if @cw.closed?
+			@logger.info "Find device..."
+			begin
+				@cw.find_device
+				@cw.open
+				@cw.listen
+				@logger.info "Found and connected"
+			rescue ContinuousWave::DeviceNotFound
+			end
+		end
+	end
 end
 
 

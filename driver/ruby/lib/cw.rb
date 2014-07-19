@@ -155,7 +155,6 @@ class ContinuousWave
 	def initialize
 		@usb = LIBUSB::Context.new
 		@buffer = ""
-		@closed = false
 		@listeners = {}
 		begin
 			find_device
@@ -163,27 +162,26 @@ class ContinuousWave
 			listen
 		rescue DeviceNotFound
 		end
-		@hotplug = @usb.on_hotplug_event do |device, event|
-			case event
-			when :HOTPLUG_EVENT_DEVICE_ARRIVED
-				unless @device
-					if device.manufacturer == 'lowreal.net' && device.product == 'CW'
-						@device = device
-						open
-						listen
-						dispatch(:opened)
-					end
-				end
-			when :HOTPLUG_EVENT_DEVICE_LEFT
-				if @device
-					if @device.device_address == device.device_address
-						close
-						dispatch(:closed)
-					end
-				end
-			end
-			:repeat
-		end
+#		@hotplug = @usb.on_hotplug_event do |device, event|
+#			p [device, event]
+#			case event
+#			when :HOTPLUG_EVENT_DEVICE_ARRIVED
+#				unless @device
+#					if device.manufacturer == 'lowreal.net' && device.product == 'CW'
+#						@device = device
+#						open
+#						listen
+#					end
+#				end
+#			when :HOTPLUG_EVENT_DEVICE_LEFT
+#				if @device
+#					if @device.device_address == device.device_address
+#						close
+#					end
+#				end
+#			end
+#			:repeat
+#		end
 	end
 
 	def on(event, &block)
@@ -196,10 +194,13 @@ class ContinuousWave
 		end
 	end
 
+	def handle_events
+		@usb.handle_events(0)
+	end
+
 	def join
 		loop do
 			@usb.handle_events
-			sleep 1
 		end
 	end
 
@@ -207,13 +208,11 @@ class ContinuousWave
 		@device = @usb.devices(:idVendor => ID_VENDOR, :idProduct => ID_PRODUCT).select {|i|
 			i.manufacturer == 'lowreal.net' && i.product == 'CW'
 		}.first or raise DeviceNotFound
-		self
 	end
 
 	def open
 		@handle = @device.open
 		@handle.claim_interface(0)
-		@closed = false
 
 		@thread = Thread.start do
 			Thread.current.abort_on_exception = true
@@ -231,18 +230,25 @@ class ContinuousWave
 				sleep 0.1
 			end
 		end
+
+		dispatch(:opened)
 	end
 
 	def close
 		@device = nil
 		@thread.kill rescue nil
 		@handle.close
-		@closed = true
+		@handle = nil
 		@listen.kill if @listen
+		dispatch(:closed)
+	end
+
+	def opened?
+		!!@device
 	end
 	
 	def closed?
-		@closed
+		!opened?
 	end
 
 	def device_buffer
@@ -357,7 +363,7 @@ class ContinuousWave
 								if !char || char == "\0"
 									dispatch(:sent, {
 										:char => buffer,
-										:custom => false,
+										:custom => true,
 									})
 								else
 									dispatch(:sent, {
