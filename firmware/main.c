@@ -258,7 +258,9 @@ usbMsgLen_t usbFunctionSetup(uint8_t data[8]) {
 			request_save_config++;
 			return 0;
 		} else {
-			return 0;
+			((uint16_t*)dataBuffer)[0] = config.tone;
+			usbMsgPtr = (usbMsgPtr_t)dataBuffer;
+			return 2;
 		}
 	}
 	

@@ -1,0 +1,25 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    em-websocket (0.5.1)
+      eventmachine (>= 0.12.9)
+      http_parser.rb (~> 0.6.0)
+    em-websocket-client (0.1.2)
+      eventmachine
+      websocket
+    eventmachine (1.0.3)
+    ffi (1.9.0)
+    http_parser.rb (0.6.0)
+    json (1.8.1)
+    libusb (0.4.1)
+      ffi (>= 1.0)
+    websocket (1.1.4)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  em-websocket
+  em-websocket-client
+  json
+  libusb

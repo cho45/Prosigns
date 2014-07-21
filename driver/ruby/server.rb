@@ -1,5 +1,14 @@
 #!/usr/bin/env ruby
 
+begin
+	# bundle install --path gems --standalone
+	require File.dirname(__FILE__) + "/gems/bundler/setup.rb"
+rescue LoadError
+	require 'rubygems'
+	require 'bundler'
+	Bundler.require
+end
+
 require 'eventmachine'
 require 'em-websocket'
 require "curses"
@@ -77,14 +86,26 @@ EM::run do
 				end
 
 				case method
+				when "device_buffer"
+					ret = @cw.device_buffer
 				when "speed"
 					params = [ :speed ].map {|i| params[i.to_s] } if params.is_a? Hash
-					@cw.speed = params[0]
-					ret = true
+					if !params.empty? && !params[0].zero?
+						@cw.speed = params[0]
+					end
+					ret = @cw.speed
+				when "inhibit_time"
+					params = [ :inhibit_time ].map {|i| params[i.to_s] } if params.is_a? Hash
+					if !params.empty?
+						@cw.inhibit_time = params[0]
+					end
+					ret = @cw.inhibit_time
 				when "tone"
 					params = [ :tone ].map {|i| params[i.to_s] } if params.is_a? Hash
-					@cw.tone = params[0]
-					ret = true
+					if !params.empty?
+						@cw.tone = params[0]
+					end
+					ret = @cw.tone
 				when "send"
 					params = [ :string ].map {|i| params[i.to_s] } if params.is_a? Hash
 					@cw << params[0]

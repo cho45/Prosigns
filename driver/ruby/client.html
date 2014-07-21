@@ -1,14 +1,17 @@
 <!DOCTYPE html>
-<html>
+<html ng-app="App">
 	<head>
 		<title></title>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 
-		<script type="text/javascript" src="//code.jquery.com/jquery-1.10.2.min.js"></script>
-		<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css">
-		<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-theme.min.css">
-		<script src="//netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
+		<script type="text/javascript" src="assets/jquery-2.1.1.js"></script>
+		<link rel="stylesheet" href="assets/bootstrap/css/bootstrap.css">
+		<link rel="stylesheet" href="assets/bootstrap/css/bootstrap-theme.css">
+		<script src="assets/bootstrap/js/bootstrap.js"></script>
+		<script src="assets/angular.js"></script>
+		<script src="assets/underscore.js"></script>
+		<script src="client.js"></script>
 
 		<link rev="made" href="mailto:cho45@lowreal.net"/>
 		<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
@@ -17,69 +20,50 @@
 		<script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
 		<![endif]-->
 	</head>
-	<body>
+	<body ng-controller="MainCtrl">
 		<div class="container">
 			<div class="page-header">
-				<h1></h1>
-				<p class="lead"></p>
+				<h1>Control Morse Device</h1>
 			</div>
 
-			<div id="footer">
-				<address>2014 <a href="mailto:cho45@lowreal.net">cho45@lowreal.net</a></address>
-			</div>
+			<form class="form-horizontal" style="width: 300px">
+				<div class="form-group">
+					<div class="col-sm-12">
+						<pre class="form-control-static"><span class="sent">{{ sent.join('') }}</span><span class="buffer">{{ buffer.join('') }}</span></pre>
+					</div>
+				</div>
+
+				<div class="form-group form-group-sm">
+					<label class="col-sm-4 control-label">Speed</label>
+					<div class="col-sm-8">
+						<div class="input-group">
+							<input type="number" min="5" max="50" class="form-control" ng-model="speed"/>
+							<div class="input-group-addon">wpm</div>
+						</div>
+					</div>
+				</div>
+				<div class="form-group form-group-sm">
+					<label class="col-sm-4 control-label">Inhibit</label>
+					<div class="col-sm-8">
+						<div class="input-group">
+							<input type="number" min="5" max="50" class="form-control" ng-model="inhibit_time"/>
+							<div class="input-group-addon">msec</div>
+						</div>
+					</div>
+				</div>
+				<div class="form-group form-group-sm">
+					<label class="col-sm-4 control-label">Side tone</label>
+					<div class="col-sm-8">
+						<div class="input-group">
+							<div class="input-group-addon">
+								<input type="checkbox" class="" ng-model="toneEnabled"/>
+							</div>
+							<input type="number" min="100" max="1000" class="form-control" ng-model="tone"/>
+							<div class="input-group-addon">Hz</div>
+						</div>
+					</div>
+				</div>
+			</form>
 		</div>
-
-		<script>
-			var service = {};
-			service.request_id = 0;
-
-			service.connect = function () {
-				service.socket = new WebSocket("ws://localhost:51234");
-
-				service.socket.onopen = function () {
-					console.log('onopen');
-				};
-
-				service.socket.onclose = function () {
-					console.log('onclose');
-					delete service.socket;
-					setTimeout(function () {
-						console.log('reconnecting');
-						service.connect();
-					}, 1000);
-				};
-
-				service.socket.onmessage = function (e) {
-					var data = JSON.parse(e.data);
-					console.log('ws.onmessage', data);
-					if (typeof data.id == 'number') {
-						if (service.command.callbacks[data.id]) {
-							service.command.callbacks[data.id](data);
-						} else {
-							console.log('unknown id');
-						}
-					} else {
-						console.log(data.result.event, data.result.value);
-					}
-				};
-
-			};
-
-			service.command = function (method, params) {
-				var id = service.request_id++;
-				service.command.callbacks[id] = function (data) {
-					delete service.command.callbacks[id];
-					console.log(data.result);
-				};
-				service.socket.send(JSON.stringify({
-					method : method,
-					params : params,
-					id     : id
-				}));
-			};
-			service.command.callbacks = {};
-
-			service.connect();
-		</script>
 	</body>
 </html>
