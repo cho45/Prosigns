@@ -41,14 +41,16 @@ EM::run do
 			@channel.push JSON.generate({ "id" => nil, "result" => {
 				:event => :sent,
 				:value => {
-					:sign => e[:char].unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, '')
+					:sign => e[:char].unpack("C*").map {|i| "%08b" % i }.join.sub(/^0+/, ''),
+					:buffer => e[:buffer],
 				},
 			} })
 		else
 			@channel.push JSON.generate({ "id" => nil, "result" => {
 				:event => :sent,
 				:value => {
-					:char => e[:char]
+					:char => e[:char],
+					:buffer => e[:buffer],
 				},
 			} })
 		end

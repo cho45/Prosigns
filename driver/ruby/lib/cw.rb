@@ -351,7 +351,7 @@ class ContinuousWave
 						:dataIn   => 8,
 						:timeout  => 5000,
 					)
-					@buffer_size = status[0]
+					@buffer_size = status[0].ord
 					sent = status[1..-1]
 					sent.each_char do |char|
 						# p [state, char]
@@ -363,6 +363,7 @@ class ContinuousWave
 								dispatch(:sent, {
 									:char => char,
 									:custom => false,
+									:buffer => @buffer_size,
 								})
 							end
 						when :custom
@@ -374,11 +375,13 @@ class ContinuousWave
 									dispatch(:sent, {
 										:char => buffer,
 										:custom => true,
+										:buffer => @buffer_size,
 									})
 								else
 									dispatch(:sent, {
 										:char => char,
 										:custom => false,
+										:buffer => @buffer_size,
 									})
 								end
 								buffer.clear

@@ -11,6 +11,7 @@
 		<script src="assets/bootstrap/js/bootstrap.js"></script>
 		<script src="assets/angular.js"></script>
 		<script src="assets/underscore.js"></script>
+		<script src="assets/keyString.js"></script>
 		<script src="client.js"></script>
 
 		<link rev="made" href="mailto:cho45@lowreal.net"/>
@@ -29,7 +30,28 @@
 			<form class="form-horizontal" style="width: 300px">
 				<div class="form-group">
 					<div class="col-sm-12">
-						<pre class="form-control-static"><span class="sent">{{ sent.join('') }}</span><span class="buffer">{{ buffer.join('') }}</span></pre>
+						<pre class="form-control-static"><span class="sent">{{ sent.join('') }}</span><span class="buffer">{{ buffer }}</span><!-- span class="queue">{{ queue }}</span --></pre></pre>
+						<style scoped>
+							.sent {
+								font-weight: bold;
+								color: #666;
+							}
+
+							.buffer {
+								font-weight: bold;
+								color: #000;
+							}
+
+							.queue {
+								font-weight: bold;
+								color: #333;
+							}
+						</style>
+					</div>
+				</div>
+				<div class="form-group">
+					<div class="col-sm-12">
+						<input type="text" class="form-control" placeholder="input" id="input"/>
 					</div>
 				</div>
 

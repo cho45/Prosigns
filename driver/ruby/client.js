@@ -1,7 +1,7 @@
 
 var App = angular.module('App', []);
 
-App.factory('MorseDevice', function ($q, $rootScope) {
+App.factory('MorseDevice', function ($q) {
 	var MORSE_CODES = [
 		0, // 0 NUL
 		parseInt("111010111010111", 2), // 1 SOH => CT / KA
@@ -150,6 +150,14 @@ App.factory('MorseDevice', function ($q, $rootScope) {
 			self.initListener();
 			self.buffer = '';
 			self.deviceQueue = 0;
+
+			self.addListener('sent', function (e) {
+				self.deviceQueue = e.buffer;
+				self.getDeviceBuffer(function (deviceBuffer) {
+					self.dispatchEvent('buffer', { value : deviceBuffer });
+				});
+				self.exhaust();
+			});
 		},
 
 		connect : function (callback) {
@@ -192,7 +200,7 @@ App.factory('MorseDevice', function ($q, $rootScope) {
 				if (data.error) {
 					throw data.error;
 				}
-				callback(data.result);
+				if (callback) callback(data.result);
 			};
 			self.socket.send(JSON.stringify({
 				method : method,
@@ -225,6 +233,7 @@ App.factory('MorseDevice', function ($q, $rootScope) {
 			if (self.deviceQueue < MIN) {
 				self.getDeviceBuffer(function (deviceBuffer) {
 					console.log('deviceBuffer', deviceBuffer.length);
+					self.dispatchEvent('buffer', { value : deviceBuffer });
 					if (!(deviceBuffer.length < MIN)) return;
 					console.log('do exhaust', self.deviceQueue, self.buffer.length);
 					var max = 64 - self.deviceQueue;
@@ -235,6 +244,9 @@ App.factory('MorseDevice', function ($q, $rootScope) {
 					self.command('send', [ send ], function (data) {
 						self._exhaust = false;
 						self.dispatchEvent('queue', { value : self.buffer });
+						self.getDeviceBuffer(function (deviceBuffer) {
+							self.dispatchEvent('buffer', { value : deviceBuffer });
+						});
 					});
 				});
 			} else {
@@ -344,7 +356,7 @@ App.factory('MorseDevice', function ($q, $rootScope) {
 	return MorseDevice;
 });
 
-App.controller('MainCtrl', function ($scope, $timeout, MorseDevice) {
+App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 	var device = new MorseDevice({
 		server : "ws://localhost:51234",
 		autoReconnect : true
@@ -358,7 +370,6 @@ App.controller('MainCtrl', function ($scope, $timeout, MorseDevice) {
 	$scope.sent = [];
 	$scope.buffer = [];
 	$scope.queue = [];
-
 
 	device.addListener('connect', function () {
 	});
@@ -417,6 +428,18 @@ App.controller('MainCtrl', function ($scope, $timeout, MorseDevice) {
 		});
 	});
 
+	device.addListener('buffer', function (e) {
+		$scope.$evalAsync(function () {
+			$scope.buffer = e.value;
+		});
+	});
+
+	device.addListener('queue', function (e) {
+		$scope.$evalAsync(function () {
+			$scope.queue = e.value;
+		});
+	});
+
 	$scope.$watch('speed', function (newValue, oldValue) {
 		if (newValue === oldValue) return;
 		device.setSpeed(newValue, function () {
@@ -450,6 +473,27 @@ App.controller('MainCtrl', function ($scope, $timeout, MorseDevice) {
 			});
 		}
 	});
+
+	var input = $document.find('#input');
+	input.keydown(function (e) {
+		var key = keyString(e);
+		console.log(key);
+		if (/^[a-z0-9=+\-]$/i.test(key)) {
+			device.queue(key);
+		} else
+		if ('SPC' === key) {
+			device.queue(' ');
+		} else
+		if ('ESC' === key || 'C-C' === key) {
+			device.stop();
+		} else
+		if ('BS' === key) {
+			device.back();
+		}
+
+		return false;
+	});
+	input.focus();
 
 	device.connect();
 });
