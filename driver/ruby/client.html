@@ -30,11 +30,11 @@
 			<form class="form-horizontal" style="width: 300px">
 				<div class="form-group">
 					<div class="col-sm-12">
-						<pre class="form-control-static"><span class="sent">{{ sent.join('') }}</span><span class="buffer">{{ buffer }}</span><!-- span class="queue">{{ queue }}</span --></pre></pre>
+						<pre class="form-control-static"><span class="sent">{{ sent.join('') }}</span><span class="buffer">{{ buffer }}</span><span class="queue">{{ queue }}</span></pre>
 						<style scoped>
 							.sent {
 								font-weight: bold;
-								color: #666;
+								color: #999;
 							}
 
 							.buffer {
@@ -44,7 +44,7 @@
 
 							.queue {
 								font-weight: bold;
-								color: #333;
+								color: #666;
 							}
 						</style>
 					</div>
@@ -52,6 +52,7 @@
 				<div class="form-group">
 					<div class="col-sm-12">
 						<input type="text" class="form-control" placeholder="input" id="input"/>
+						<button class="btn" ng-click="send('CQ CQ DE JH1UMV JH1UMV PSE K ')">CQ</button>
 					</div>
 				</div>
 

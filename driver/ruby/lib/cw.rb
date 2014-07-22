@@ -304,10 +304,10 @@ class ContinuousWave
 	def tone
 		@handle.control_transfer(
 			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
-			:bRequest      => USB_REQ_SPEED,
+			:bRequest      => USB_REQ_TONE,
 			:wValue        => 0x0000,
 			:wIndex        => 0x0000,
-			:dataIn        => 1,
+			:dataIn        => 2,
 		).unpack("v")[0]
 	end
 

@@ -148,12 +148,16 @@ App.factory('MorseDevice', function ($q) {
 			var self = this;
 			self.opts = opts;
 			self.initListener();
+			self.queue = '';
 			self.buffer = '';
 			self.deviceQueue = 0;
 
 			self.addListener('sent', function (e) {
 				self.deviceQueue = e.buffer;
+				self.buffer = self.buffer.substring(1);
+				self.dispatchEvent('buffer', { value : self.buffer });
 				self.getDeviceBuffer(function (deviceBuffer) {
+					self.buffer = deviceBuffer;
 					self.dispatchEvent('buffer', { value : deviceBuffer });
 				});
 				self.exhaust();
@@ -216,41 +220,39 @@ App.factory('MorseDevice', function ($q) {
 			}
 		},
 
-		queue : function (string) {
+		send : function (string) {
 			var self = this;
-			self.buffer += string;
-			self.dispatchEvent('queue', { value : self.buffer });
+			self.queue += string;
+			self.dispatchEvent('queue', { value : self.queue });
 			self.exhaust();
 		},
 
 		exhaust : _.throttle(function () {
 			var self = this;
-			var MIN = 10;
-			var MAX = 64;
+			var MIN = 16;
+			var MAX = 32;
 
 			if (self._exhaust) return;
-			if (!self.buffer.length) return;
+			if (!self.queue.length) return;
 			if (self.deviceQueue < MIN) {
 				self.getDeviceBuffer(function (deviceBuffer) {
 					console.log('deviceBuffer', deviceBuffer.length);
-					self.dispatchEvent('buffer', { value : deviceBuffer });
 					if (!(deviceBuffer.length < MIN)) return;
-					console.log('do exhaust', self.deviceQueue, self.buffer.length);
+					console.log('do exhaust', self.deviceQueue, self.queue.length);
 					var max = 64 - self.deviceQueue;
 					self.deviceQueue += max;
-					var send =  self.buffer.substring(0, max);
-					self.buffer = self.buffer.substring(max);
+					var send =  self.queue.substring(0, max);
+					self.queue = self.queue.substring(max);
+					self.buffer += send;
 					self._exhaust = true;
+					self.dispatchEvent('queue', { value : self.queue });
+					self.dispatchEvent('buffer', { value : self.buffer });
 					self.command('send', [ send ], function (data) {
 						self._exhaust = false;
-						self.dispatchEvent('queue', { value : self.buffer });
-						self.getDeviceBuffer(function (deviceBuffer) {
-							self.dispatchEvent('buffer', { value : deviceBuffer });
-						});
 					});
 				});
 			} else {
-				console.log('pending exhaust', self.deviceQueue, self.buffer.length);
+				console.log('pending exhaust', self.deviceQueue, self.queue.length);
 			}
 		}, 100),
 
@@ -259,30 +261,30 @@ App.factory('MorseDevice', function ($q) {
 			self.command('device_buffer', [], callback);
 		},
 
-		setSpeed : function (speed, callback) {
+		setSpeed : _.throttle(function (speed, callback) {
 			var self = this;
 			self.command('speed', [ speed ], callback);
-		},
+		}, 250),
 
 		getSpeed : function (callback) {
 			var self = this;
 			self.command('speed', [], callback);
 		},
 
-		setInhibitTime : function (inhibit_time, callback) {
+		setInhibitTime : _.throttle(function (inhibit_time, callback) {
 			var self = this;
 			self.command('inhibit_time', [ inhibit_time ], callback);
-		},
+		}, 250),
 
 		getInhibitTime : function (callback) {
 			var self = this;
 			self.command('inhibit_time', [], callback);
 		},
 
-		setTone : function (tone, callback) {
+		setTone : _.throttle(function (tone, callback) {
 			var self = this;
 			self.command('tone', [ tone ], callback);
-		},
+		}, 250),
 
 		getTone : function (callback) {
 			var self = this;
@@ -291,21 +293,25 @@ App.factory('MorseDevice', function ($q) {
 
 		stop : _.throttle(function (callback) {
 			var self = this;
-			self.buffer = '';
-			self.dispatchEvent('queue', { value : self.buffer });
+			self.queue = '';
+			self.deviceQueue = 0;
+			self.dispatchEvent('queue', { value : self.queue });
 			self.command('stop', [], callback);
+			self.getDeviceBuffer(function (deviceBuffer) {
+				self.dispatchEvent('buffer', { value : deviceBuffer });
+			});
 		}, 100),
 
 		back : _.throttle(function (callback) {
 			var self = this;
-			if (self.buffer) {
-				self.buffer = self.buffer.slice(0, -1);
-				self.dispatchEvent('queue', { value : self.buffer });
+			if (self.queue) {
+				self.queue = self.queue.slice(0, -1);
+				self.dispatchEvent('queue', { value : self.queue });
 				setTimeout(callback, 0);
 			} else {
 				self.command('back', [], callback);
 			}
-		}, 200),
+		}, 100),
 
 		initListener : function () {
 			this.listeners = {};
@@ -368,8 +374,8 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 	$scope.tone = 600;
 	$scope.toneEnabled = true;
 	$scope.sent = [];
-	$scope.buffer = [];
-	$scope.queue = [];
+	$scope.buffer = '';
+	$scope.queue = '';
 
 	device.addListener('connect', function () {
 	});
@@ -429,12 +435,14 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 	});
 
 	device.addListener('buffer', function (e) {
+		console.log('buffer', e);
 		$scope.$evalAsync(function () {
 			$scope.buffer = e.value;
 		});
 	});
 
 	device.addListener('queue', function (e) {
+		console.log('queue', e);
 		$scope.$evalAsync(function () {
 			$scope.queue = e.value;
 		});
@@ -474,15 +482,19 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 		}
 	});
 
+	$scope.send = function (string) {
+		device.send(string);
+	};
+
 	var input = $document.find('#input');
 	input.keydown(function (e) {
 		var key = keyString(e);
 		console.log(key);
 		if (/^[a-z0-9=+\-]$/i.test(key)) {
-			device.queue(key);
+			device.send(key);
 		} else
 		if ('SPC' === key) {
-			device.queue(' ');
+			device.send(' ');
 		} else
 		if ('ESC' === key || 'C-C' === key) {
 			device.stop();
