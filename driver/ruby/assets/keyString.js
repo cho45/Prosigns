@@ -1,6 +1,7 @@
 function keyString (e) {
 	var ret = '';
 	var key = e.keyCode || e.which;
+	if (e.shiftKey) ret += 'S-';
 	if (e.ctrlKey) ret += 'C-';
 	if (e.altKey)  ret += 'M-';
 	if (e.metaKey && !e.ctrlKey) ret += 'W-';

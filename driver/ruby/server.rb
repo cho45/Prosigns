@@ -140,16 +140,20 @@ EM::run do
 
 	timer = EventMachine::PeriodicTimer.new(1) do
 		if @cw.closed?
+			puts "Find device..."
 			@logger.info "Find device..."
 			begin
 				@cw.find_device
 				@cw.open
 				@cw.listen
+				puts "Server running"
 				@logger.info "Found and connected"
 			rescue ContinuousWave::DeviceNotFound
 			end
 		end
 	end
+
+	puts "Server running"
 end
 
 

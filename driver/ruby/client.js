@@ -229,8 +229,8 @@ App.factory('MorseDevice', function ($q) {
 
 		exhaust : _.throttle(function () {
 			var self = this;
-			var MIN = 16;
-			var MAX = 32;
+			var MIN = 100;
+			var MAX = 128;
 
 			if (self._exhaust) return;
 			if (!self.queue.length) return;
@@ -239,7 +239,7 @@ App.factory('MorseDevice', function ($q) {
 					console.log('deviceBuffer', deviceBuffer.length);
 					if (!(deviceBuffer.length < MIN)) return;
 					console.log('do exhaust', self.deviceQueue, self.queue.length);
-					var max = 64 - self.deviceQueue;
+					var max = MAX - self.deviceQueue;
 					self.deviceQueue += max;
 					var send =  self.queue.substring(0, max);
 					self.queue = self.queue.substring(max);
@@ -309,6 +309,8 @@ App.factory('MorseDevice', function ($q) {
 				self.dispatchEvent('queue', { value : self.queue });
 				setTimeout(callback, 0);
 			} else {
+				self.buffer = self.buffer.slice(0, -1);
+				self.dispatchEvent('buffer', { value : self.buffer });
 				self.command('back', [], callback);
 			}
 		}, 100),
@@ -484,13 +486,20 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 
 	$scope.send = function (string) {
 		device.send(string);
+		$document.find('#input').focus();
 	};
 
 	var input = $document.find('#input');
 	input.keydown(function (e) {
-		var key = keyString(e);
+		var key = keyString(e.originalEvent);
 		console.log(key);
-		if (/^[a-z0-9=+\-]$/i.test(key)) {
+
+		if (key === 'bb') key = '+';
+		if (key === 'S-bb') key = '=';
+		if (key === 'S-bf') key = '?';
+		if (key === 'S-BS') key = '\x7f';
+
+		if (/^[a-z0-9=+\-\?\x7f]$/i.test(key)) {
 			device.send(key);
 		} else
 		if ('SPC' === key) {

@@ -1,5 +1,6 @@
 require 'libusb'
 require 'libusb/eventmachine'
+require 'thread'
 
 class ContinuousWave
 	ID_VENDOR = 0x16c0
@@ -156,6 +157,7 @@ class ContinuousWave
 		@usb = LIBUSB::Context.new
 		@buffer = ""
 		@listeners = {}
+		@mutex = Mutex.new
 		begin
 			find_device
 			open
@@ -218,14 +220,16 @@ class ContinuousWave
 			Thread.current.abort_on_exception = true
 			loop do
 				unless @buffer.empty?
-					sent = @handle.control_transfer(
-						:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-						:bRequest      => USB_REQ_SEND,
-						:wValue        => 0x0000,
-						:wIndex        => 0x0000,
-						:dataOut       => @buffer.slice(0, 254)
-					)
-					@buffer.slice!(0, 254)
+					@mutex.synchronize do
+						sent = @handle.control_transfer(
+							:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+							:bRequest      => USB_REQ_SEND,
+							:wValue        => 0x0000,
+							:wIndex        => 0x0000,
+							:dataOut       => @buffer.slice(0, 254)
+						)
+						@buffer.slice!(0, 254)
+					end
 				end
 				sleep 0.1
 			end
@@ -252,23 +256,27 @@ class ContinuousWave
 	end
 
 	def device_buffer
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
-			:bRequest      => USB_REQ_SEND,
-			:wValue        => 0x0000,
-			:wIndex        => 0x0000,
-			:dataIn        => 254,
-		)
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+				:bRequest      => USB_REQ_SEND,
+				:wValue        => 0x0000,
+				:wIndex        => 0x0000,
+				:dataIn        => 254,
+			)
+		end
 	end
 
 	def speed_inhibit
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
-			:bRequest      => USB_REQ_SPEED,
-			:wValue        => 0x0000,
-			:wIndex        => 0x0000,
-			:dataIn        => 2,
-		).unpack("C*")
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+				:bRequest      => USB_REQ_SPEED,
+				:wValue        => 0x0000,
+				:wIndex        => 0x0000,
+				:dataIn        => 2,
+			).unpack("C*")
+		end
 	end
 
 	def speed
@@ -282,60 +290,72 @@ class ContinuousWave
 	def speed=(speed)
 		current_speed, current_inhibit_time = *speed_inhibit
 		
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-			:bRequest      => USB_REQ_SPEED,
-			:wValue        => (speed.to_i) | (current_inhibit_time.to_i << 8),
-			:wIndex        => 0x0000,
-		)[0]
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+				:bRequest      => USB_REQ_SPEED,
+				:wValue        => (speed.to_i) | (current_inhibit_time.to_i << 8),
+				:wIndex        => 0x0000,
+			)[0]
+		end
 	end
 
 	def inhibit_time=(inhibit_time)
 		current_speed, current_inhibit_time = *speed_inhibit
 		
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-			:bRequest      => USB_REQ_SPEED,
-			:wValue        => (current_speed.to_i) | (inhibit_time.to_i << 8),
-			:wIndex        => 0x0000,
-		)[0]
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+				:bRequest      => USB_REQ_SPEED,
+				:wValue        => (current_speed.to_i) | (inhibit_time.to_i << 8),
+				:wIndex        => 0x0000,
+			)[0]
+		end
 	end
 
 	def tone
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
-			:bRequest      => USB_REQ_TONE,
-			:wValue        => 0x0000,
-			:wIndex        => 0x0000,
-			:dataIn        => 2,
-		).unpack("v")[0]
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_IN,
+				:bRequest      => USB_REQ_TONE,
+				:wValue        => 0x0000,
+				:wIndex        => 0x0000,
+				:dataIn        => 2,
+			).unpack("v")[0]
+		end
 	end
 
 	def tone=(tone)
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-			:bRequest      => USB_REQ_TONE,
-			:wValue        => tone.to_i,
-			:wIndex        => 0x0000,
-		)[0]
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+				:bRequest      => USB_REQ_TONE,
+				:wValue        => tone.to_i,
+				:wIndex        => 0x0000,
+			)[0]
+		end
 	end
 
 	def back
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-			:bRequest      => USB_REQ_BACK,
-			:wValue        => 0x0000,
-			:wIndex        => 0x0000,
-		)[0]
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+				:bRequest      => USB_REQ_BACK,
+				:wValue        => 0x0000,
+				:wIndex        => 0x0000,
+			)[0]
+		end
 	end
 
 	def stop
-		@handle.control_transfer(
-			:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
-			:bRequest      => USB_REQ_STOP,
-			:wValue        => 0x0000,
-			:wIndex        => 0x0000,
-		)[0]
+		@mutex.synchronize do
+			@handle.control_transfer(
+				:bmRequestType => LIBUSB::REQUEST_TYPE_VENDOR | LIBUSB::RECIPIENT_DEVICE | LIBUSB::ENDPOINT_OUT,
+				:bRequest      => USB_REQ_STOP,
+				:wValue        => 0x0000,
+				:wIndex        => 0x0000,
+			)[0]
+		end
 	end
 
 	def listen
