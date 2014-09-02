@@ -1,0 +1,9 @@
+{
+  "name": "USB",
+  "version": "1.0.0",
+  "repo": "cho45/USB",
+  "dependencies": {
+    "cho45/avr-utils": "*"
+  },
+  "install": "make"
+}

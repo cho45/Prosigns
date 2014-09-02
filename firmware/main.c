@@ -28,7 +28,7 @@
 #include <avr/eeprom.h>
 #include <avr/pgmspace.h>
 
-#include "ringbuffer.h"
+#include "avr-utils/ringbuffer.h"
 #include "morse.h"
 #include "uart.h"
 #include "nlz.h"

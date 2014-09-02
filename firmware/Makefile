@@ -17,12 +17,12 @@
 #                   default_serial = "avrdoper"
 # FUSES ........ Parameters for avrdude to flash the fuses appropriately.
 
-DEVICE     = atmega168p
-CLOCK      = 18000000
+DEVICE     = atmega328p
+CLOCK      = 20000000
 PROGRAMMER = -c avrispmkII -P usb
 OBJECTS    = usbdrv/usbdrv.o usbdrv/usbdrvasm.o usbdrv/oddebug.o main.o
 # Use http://www.engbedded.com/fusecalc
-FUSES      = -U lfuse:w:0xff:m -U hfuse:w:0xdc:m -U efuse:w:0xf9:m
+FUSES      = -U lfuse:w:0xde:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m
 
 
 
@@ -33,7 +33,7 @@ COMPILE_OPT = -Os -g3 -gdwarf-2
 endif
 
 AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -B 3
-COMPILE = avr-gcc -Wl,--relax,--gc-sections -Wall $(COMPILE_OPT) -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
+COMPILE = avr-gcc -Ideps -Wl,--relax,--gc-sections -Wall $(COMPILE_OPT) -DF_CPU=$(CLOCK) -mmcu=$(DEVICE)
 
 # symbolic targets:
 all:	main.hex

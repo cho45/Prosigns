@@ -48,7 +48,7 @@ section at the end of this file).
  * Since F_CPU should be defined to your actual clock rate anyway, you should
  * not need to modify this setting.
  */
-#define USB_CFG_CHECK_CRC       1
+#define USB_CFG_CHECK_CRC       0
 /* Define this to 1 if you want that the driver checks integrity of incoming
  * data packets (CRC checks). CRC checks cost quite a bit of code size and are
  * currently only available for 18 MHz crystal clock. You must choose
