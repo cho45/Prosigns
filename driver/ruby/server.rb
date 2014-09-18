@@ -15,10 +15,16 @@ require "curses"
 require "pathname"
 require 'logger'
 require 'json'
+require 'webrick'
 require File.dirname(__FILE__) + "/lib/cw"
 @logger = Logger.new($stderr)
 
-PORT = 51234
+PORT = 51233
+
+Thread.start do
+	WEBrick::HTTPServer.new(:Port => PORT, :DocumentRoot => File.dirname(__FILE__)).start
+end
+
 
 EM::run do
 	@cw = ContinuousWave.new
@@ -56,7 +62,7 @@ EM::run do
 		end
 	end
 
-	EM::WebSocket.start(:host => "0.0.0.0", :port => PORT) do |ws|
+	EM::WebSocket.start(:host => "0.0.0.0", :port => PORT + 1) do |ws|
 		ws.onopen do
 			@logger.info "WebSocket onopen #{ws}"
 			ws.send(JSON.generate({ "id" => nil, "result" => {

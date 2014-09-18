@@ -1,7 +1,7 @@
 
-var App = angular.module('App', []);
+var App = angular.module('App', ['ui.bootstrap']);
 
-App.factory('MorseDevice', function ($q) {
+App.factory('MorseDevice', function ($q, config) {
 	var MORSE_CODES = [
 		0, // 0 NUL
 		parseInt("111010111010111", 2), // 1 SOH => CT / KA
@@ -182,6 +182,7 @@ App.factory('MorseDevice', function ($q) {
 				}, 1000);
 			};
 			self.socket.onmessage = function (e) {
+				console.log(e.data);
 				var data = JSON.parse(e.data);
 				if (typeof data.id == 'number') {
 					if (self._callbacks[data.id]) {
@@ -229,8 +230,8 @@ App.factory('MorseDevice', function ($q) {
 
 		exhaust : _.throttle(function () {
 			var self = this;
-			var MIN = 100;
-			var MAX = 128;
+			var MIN = config.queue.MIN;
+			var MAX = config.queue.MAX;
 
 			if (self._exhaust) return;
 			if (!self.queue.length) return;
@@ -364,12 +365,13 @@ App.factory('MorseDevice', function ($q) {
 	return MorseDevice;
 });
 
-App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
+App.controller('MainCtrl', function ($scope, $timeout, $document, $modal, config, MorseDevice) {
 	var device = new MorseDevice({
-		server : "ws://localhost:51234",
+		server : config.server,
 		autoReconnect : true
 	});
 
+	$scope.name = config.name;
 	$scope.connected = false;
 	$scope.speed = 20;
 	$scope.inhibit_time = 20;
@@ -379,10 +381,48 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 	$scope.buffer = '';
 	$scope.queue = '';
 
+	$scope.macros = [
+		{
+			"name" : "CQ",
+			"text" : "CQ CQ DE JH1UMV JH1UMV JCC110305 PSE K"
+		},
+		{
+			"name" : "EX",
+			"text" : "EX EX EX DE JH1UMV JH1UMV JH1UMV                                            VVVVVVVVV JH1UMV"
+		},
+		{
+			"name" : "QRL?",
+			"text" : "QRL?"
+		},
+		{
+			"name" : "QRZ?",
+			"text" : "QRZ?"
+		},
+		{
+			"name" : "BK UR",
+			"text" : "BK UR 599 5NN BK"
+		},
+		{
+			"name" : "DE",
+			"text" : "DE JH1UMV"
+		},
+		{
+			"name" : "73",
+			"text" : "73 TU E E"
+		}
+	];
+
+	try {
+		$scope.macros = angular.copy(JSON.parse(localStorage.macros));
+	} catch (e) {
+		console.log('Failed to parse JSON: ' + e);
+	}
+
 	device.addListener('connect', function () {
 	});
 
 	device.addListener('opened', function () {
+		console.log('opened!!!');
 		device.getSpeed(function (speed) {
 			console.log('getSpeed', speed);
 			$scope.$evalAsync(function () {
@@ -419,7 +459,7 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 		});
 	});
 
-	device.addListener('disconnect', function () {
+	device.addListener('disconnected', function () {
 		$scope.$evalAsync(function () {
 			$scope.connected = false;
 		});
@@ -485,8 +525,58 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 	});
 
 	$scope.send = function (string) {
-		device.send(string);
+		device.send(string + ' ');
 		$document.find('#input').focus();
+	};
+
+	$scope.edit = function (macro) {
+		var modal = $modal.open({
+			templateUrl: "edit.html",
+			controller : function ($scope, $modalInstance, macro) {
+				$scope.mode  = macro ? 'edit' : 'add';
+				$scope.macro = $scope.mode === 'edit' ? angular.copy(macro) : {};
+
+				$scope.ok = function () {
+					$modalInstance.close(angular.copy($scope.macro));
+				};
+
+				$scope.cancel = function () {
+					$modalInstance.dismiss('cancel');
+				};
+
+				$scope.remove = function () {
+					if (confirm("Sure?")) {
+						$modalInstance.close('remove');
+					}
+				};
+			},
+			resolve : {
+				macro : function () {
+					return macro;
+				}
+			}
+		});
+
+		modal.result.then(function (m) {
+			if (m != 'remove') {
+				console.log(m);
+				if (macro) {
+					macro.name = m.name;
+					macro.text = m.text;
+				} else {
+					$scope.macros.push(m);
+				}
+			} else {
+				for (var i = 0, len = $scope.macros.length; i < len; i++) {
+					if ($scope.macros[i] === macro) {
+						$scope.macros.splice(i, 1);
+						break;
+					}
+				}
+			}
+
+			localStorage.macros = JSON.stringify(angular.copy($scope.macros));
+		});
 	};
 
 	var input = $document.find('#input');
@@ -494,12 +584,13 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 		var key = keyString(e.originalEvent);
 		console.log(key);
 
+		if (key === 'bf') key = '/';
 		if (key === 'bb') key = '+';
 		if (key === 'S-bb') key = '=';
 		if (key === 'S-bf') key = '?';
 		if (key === 'S-BS') key = '\x7f';
 
-		if (/^[a-z0-9=+\-\?\x7f]$/i.test(key)) {
+		if (/^[a-z0-9=+\-\?\/\x7f]$/i.test(key)) {
 			device.send(key);
 		} else
 		if ('SPC' === key) {
@@ -510,6 +601,12 @@ App.controller('MainCtrl', function ($scope, $timeout, $document, MorseDevice) {
 		} else
 		if ('BS' === key) {
 			device.back();
+		} else
+		if ('C-RET' === key) { // BT
+			device.send('=');
+		} else
+		if ('S-C-RET' === key) { // AR
+			device.send('+');
 		}
 
 		return false;
